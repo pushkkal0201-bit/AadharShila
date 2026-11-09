@@ -1,0 +1,7 @@
+{
+  "method": "Static Chromium rendering using current HTML/CSS/JS and injected authenticated local API fixture responses",
+  "queue_rows": 16,
+  "decision_screen_outcome": "REFER",
+  "javascript_page_errors": [],
+  "limitation": "Direct browser network navigation blocked; not full E2E."
+}

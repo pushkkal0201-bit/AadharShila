@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "aadharshila"
+version = "0.1.0"
+description = "Evidence-driven mortgage underwriting demonstration platform"
+requires-python = ">=3.11"
+dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "SQLAlchemy>=2.0,<3", "pydantic>=2.8,<3", "PyJWT>=2.8,<3", "python-multipart>=0.0.9,<1", "pypdf>=5,<7", "alembic>=1.13,<2"]
+[tool.setuptools.packages.find]
+where = ["src"]
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

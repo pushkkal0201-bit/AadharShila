@@ -1,0 +1,1741 @@
+You are the lead engineer accountable for designing, implementing, testing, and delivering **Aadharshila**, an evidence-driven mortgage underwriting platform.
+
+Work as a coordinated engineering team covering product architecture, backend engineering, frontend engineering, credit-risk modeling, document intelligence, security, reliability, and quality assurance.
+
+Your task is to produce a **complete, integrated, runnable application with production-oriented engineering**, not a concept, architecture-only answer, scaffold, collection of disconnected snippets, or polished interface backed by fake decisions.
+
+The application is intended for **Problem Statement 2: Digitally Automated Mortgage Underwriting Engine**, associated with the E-Cell IIT Bombay × Hero Housing Fintech Challenge.
+
+Build one integrated solution for:
+
+- Home Loans.
+- Loan Against Property, abbreviated LAP.
+- Salaried applicants.
+- Self-employed applicants.
+- Co-applicants and guarantors where applicable.
+
+The product name is **Aadharshila** everywhere: application interface, repository documentation, package descriptions, generated reports, screenshots, and demonstration material.
+
+Do not use HeroFlow AI as the product name. Do not imply official endorsement by Hero Housing Finance or affiliation with UIDAI/Aadhaar because of the chosen name.
+
+---
+
+# 1. Your delivery responsibility
+
+You are responsible for the final working result.
+
+You must:
+
+1. Inspect the workspace and existing repository.
+2. Read applicable repository instructions.
+3. Identify existing capabilities and unfinished work.
+4. Establish shared data contracts.
+5. Implement the backend and frontend.
+6. Implement real calculations and state transitions.
+7. Integrate the modules into complete workflows.
+8. Add reproducible demonstration data.
+9. Run migrations and start the application.
+10. Execute meaningful automated tests.
+11. Inspect the main workflows in a browser when tools permit.
+12. Fix issues you discover.
+13. Produce accurate documentation and a final verification report.
+
+Do not stop after describing what should be built.
+
+If your environment cannot execute code, state that limitation and provide a coherent multi-file implementation with exact file paths and commands. Never claim to have run tests, inspected a browser, contacted a provider, or deployed services unless you actually did.
+
+If context becomes limited, maintain a concise implementation checkpoint containing:
+
+- Completed work.
+- Current architecture.
+- Changed files.
+- Commands executed.
+- Test results.
+- Known defects.
+- Next dependency-ordered actions.
+
+Continue from the checkpoint instead of restarting or silently reducing scope.
+
+---
+
+# 2. Product purpose
+
+Aadharshila evaluates a mortgage application by connecting:
+
+**Applicant information → authorized evidence → verification → affordability → credit risk → property assessment → policies and compliance controls → decision → explanation → audit and reassessment.**
+
+Every assessment must answer:
+
+1. Which information was submitted?
+2. Which information came from an external source?
+3. Which facts are verified?
+4. Which facts are missing, stale, contradictory, or uncertain?
+5. What income and obligations were accepted, and why?
+6. What loan terms satisfy the configured affordability and collateral rules?
+7. Which policies and controls applied?
+8. What risk estimate was produced, and what are its limitations?
+9. Why was the application approved, rejected, or referred?
+10. What is the next permitted action?
+11. Can the original decision be reproduced later?
+
+The engine must return:
+
+- **APPROVE**
+- **REJECT**
+- **REFER**
+
+A referral is a completed routing decision, not completed credit underwriting.
+
+Straight-through approval is permitted only when all mandatory prerequisites are satisfied.
+
+---
+
+# 3. Non-negotiable truthfulness requirements
+
+Do not fabricate:
+
+- Provider integrations.
+- Regulatory certification.
+- Actual lender policies.
+- Dataset provenance.
+- Model training.
+- Default probabilities.
+- Accuracy metrics.
+- Latency measurements.
+- Cost savings.
+- Test results.
+- Security-audit results.
+- User adoption.
+- Production deployment.
+
+Do not claim:
+
+- “100% regulator compliant.”
+- “Eliminates human bias.”
+- “Guaranteed approval.”
+- “Guaranteed hackathon winner.”
+- “Production ready” solely because the application runs.
+- “Immutable” when records are merely stored in a normal editable database.
+- “Verified” when information was only extracted with OCR.
+
+Maintain three explicit capability classifications:
+
+1. **Implemented and verified locally.**
+2. **Implemented with simulated or sandbox dependencies.**
+3. **Production dependency or validation outstanding.**
+
+The goal is a complete software workflow with clearly stated deployment prerequisites—not artificial certainty.
+
+---
+
+# 4. Autonomy and tool use
+
+Proceed independently with routine, reversible implementation decisions.
+
+Do not repeatedly ask for permission to:
+
+- Read files.
+- Create local application files.
+- Install dependencies within the permitted environment.
+- Run migrations against the development database.
+- Run tests.
+- Seed synthetic demonstration data.
+- Start local services.
+- Fix defects.
+
+Do not perform unauthorized:
+
+- Public deployment.
+- Paid service provisioning.
+- Real financial transactions.
+- Production database changes.
+- External repository pushes.
+- Transmission of real borrower data.
+- Credential disclosure.
+- Destructive changes to unrelated files.
+
+Use environment variables for secrets.
+
+If external credentials are unavailable, build the adapter contract and a clearly labeled deterministic fixture provider. Continue with the application.
+
+If parallel agents are available and permitted, delegate independent modules with explicit ownership. Establish shared contracts first. Keep one integration owner responsible for end-to-end correctness.
+
+---
+
+# 5. Mandatory problem-statement coverage
+
+The final application must demonstrate all eight areas:
+
+| Requirement | Required implementation |
+|---|---|
+| External data integration | Authorized connector framework, provenance, consent, freshness, failures |
+| Eligibility and policy | Real calculations and separate Home Loan/LAP policy packs |
+| Fraud and KYC/AML | Verification signals, screening workflow, safe escalation |
+| Risk scoring | Reproducible model or transparent scorecard with honest limitations |
+| Documents and property | Extraction, reconciliation, property-evidence assessment |
+| Compliance checks | Versioned controls linked to requirements and evidence |
+| Instant decisioning | Deterministic approve/reject/refer service |
+| Explainability and governance | Evidence-backed reasons, audit history, replay, controlled changes |
+
+Property valuation is a supporting module within underwriting. Do not develop a second unrelated submission.
+
+---
+
+# 6. Architecture
+
+Prefer a **modular monolith with durable background workers** initially.
+
+Use logical boundaries that can later become services without forcing unnecessary distributed complexity.
+
+Recommended stack:
+
+- Frontend: Next.js, TypeScript.
+- Styling: Tailwind CSS with an accessible component system.
+- Backend: FastAPI, Pydantic.
+- Persistence: PostgreSQL.
+- ORM/migrations: SQLAlchemy and Alembic, or an equivalent justified approach.
+- Jobs: Celery/Redis or another durable queue with documented delivery semantics.
+- Document storage: S3-compatible storage; MinIO is acceptable locally.
+- ML: scikit-learn, XGBoost where justified, SHAP.
+- Backend testing: pytest.
+- Frontend testing: component tests where useful and Playwright for workflows.
+- Local orchestration: Docker Compose.
+- Observability: structured logs and basic metrics.
+- API specification: generated OpenAPI.
+
+Use stable compatible dependency versions and lock them. Do not select unstable versions solely because they are newest.
+
+Avoid adding Kubernetes, Kafka, blockchain, a vector database, or a separate graph database without a concrete requirement.
+
+Suggested repository structure:
+
+```text
+aadharshila/
+  apps/
+    web/
+  services/
+    api/
+      app/
+        applications/
+        identity/
+        consent/
+        connectors/
+        evidence/
+        documents/
+        financials/
+        property/
+        fraud/
+        policies/
+        compliance/
+        risk/
+        decisions/
+        reviews/
+        audit/
+        reporting/
+        monitoring/
+      tests/
+    worker/
+  packages/
+    contracts/
+  policies/
+    home_loan/
+    lap/
+  data/
+    synthetic/
+    manifests/
+  models/
+    manifests/
+  scripts/
+  infra/
+  docs/
+  docker-compose.yml
+  .env.example
+  README.md
+```
+
+Adapt this structure if the existing repository has a good organization.
+
+---
+
+# 7. Shared data contracts
+
+Define schemas before building dependent modules.
+
+At minimum, implement persisted entities for:
+
+- Organization.
+- User.
+- Role and permissions.
+- Application.
+- Applicant.
+- Co-applicant relationship.
+- Guarantor relationship.
+- Requested loan terms.
+- Consent.
+- Connector configuration.
+- Provider request and response metadata.
+- Document.
+- Document version.
+- Extracted field.
+- Evidence item.
+- Evidence conflict.
+- Evidence dependency.
+- Normalized transaction.
+- Income assessment.
+- Obligation.
+- Property.
+- Valuation assessment.
+- Screening result.
+- Fraud signal.
+- Policy pack.
+- Policy rule.
+- Rule execution.
+- Compliance control.
+- Compliance execution.
+- Model artifact.
+- Feature snapshot.
+- Assessment.
+- Decision.
+- Decision reason.
+- Review task.
+- Evidence request.
+- Alternative-offer scenario.
+- Stress scenario.
+- Sanction record.
+- Disbursement condition.
+- Audit event.
+
+Use:
+
+- UUIDs or another collision-resistant identifier.
+- Explicit organization/application ownership.
+- Decimal monetary values.
+- ISO currency codes.
+- UTC timestamps internally.
+- Appropriate localized display dates.
+- Explicit units.
+- Revision identifiers.
+- Referential constraints.
+- Uniqueness constraints.
+- Indexed retrieval paths.
+
+Do not store business-critical relationships only inside arbitrary JSON blobs.
+
+Use JSON for bounded structured provider payloads and flexible metadata where justified.
+
+---
+
+# 8. Status models and transitions
+
+Do not mix workflow execution, verification, credit outcome, and disbursement readiness into one status field.
+
+Implement separate state models.
+
+### Application workflow
+
+Examples:
+
+- DRAFT
+- SUBMITTED
+- COLLECTING_EVIDENCE
+- ASSESSING
+- AWAITING_INFORMATION
+- AWAITING_REVIEW
+- ASSESSED
+- WITHDRAWN
+
+### Verification status
+
+- NOT_REQUESTED
+- PENDING
+- VERIFIED
+- FAILED
+- UNRESOLVED
+- EXPIRED
+- NOT_APPLICABLE
+
+### Assessment execution
+
+- QUEUED
+- RUNNING
+- COMPLETED
+- FAILED
+- SUPERSEDED
+
+### Credit outcome
+
+- APPROVE
+- REJECT
+- REFER
+
+### Policy/control result
+
+- PASS
+- FAIL
+- UNRESOLVED
+- NOT_APPLICABLE
+
+### Sanction and disbursement
+
+Model separately with explicit prerequisites.
+
+Define permitted transitions and enforce them server-side.
+
+Prevent stale workers from changing the latest assessment after newer evidence has arrived.
+
+---
+
+# 9. Applicant experience
+
+Build a complete application flow with:
+
+- Product selection.
+- Applicant type.
+- Identity and contact details.
+- Co-applicant and guarantor sections when relevant.
+- Employment/business details.
+- Income declarations.
+- Existing liabilities.
+- Loan purpose.
+- Requested amount and tenure.
+- Property information.
+- Consents.
+- Document uploads.
+- Save and resume.
+- Submission validation.
+- Status tracking.
+- Evidence requests.
+- Corrections.
+- Reassessment requests.
+- Outcome explanations.
+- Offer/disclosure previews where applicable.
+
+Use progressive disclosure so irrelevant fields are hidden.
+
+Do not require excessive personal information merely because it could be collected.
+
+Consent must be purpose-specific and visible. Do not preselect sensitive permissions.
+
+A user must be able to understand why additional evidence is requested.
+
+---
+
+# 10. Authentication and authorization
+
+Implement real server-side access control.
+
+Support roles such as:
+
+- Borrower.
+- Credit analyst.
+- Compliance reviewer.
+- Policy author.
+- Policy approver.
+- Auditor.
+- Administrator.
+
+Define a permission matrix.
+
+A borrower must not read another borrower’s:
+
+- Application.
+- Documents.
+- Decisions.
+- Evidence exports.
+- Review notes.
+
+Policy authors must not automatically have activation rights.
+
+Auditors should have read-only access appropriate to their scope.
+
+Provide demo users only in development mode. Do not ship a public unauthenticated role-switcher as authentication.
+
+Use secure session handling, established password hashing if local credentials are used, and CSRF protection where applicable to the chosen authentication design.
+
+If an OIDC provider is supported, document configuration without making it mandatory for local startup.
+
+---
+
+# 11. Consent and data lifecycle
+
+Implement consent records containing:
+
+- Subject.
+- Purpose.
+- Data categories.
+- Provider.
+- Granted timestamp.
+- Expiry where applicable.
+- Revocation timestamp.
+- Current status.
+- Version of the notice accepted.
+
+Check relevant consent before retrieval.
+
+Revocation must stop future unauthorized collection.
+
+Do not promise immediate deletion of records that may be subject to valid retention obligations. Model retention and deletion eligibility separately.
+
+Document:
+
+- Collection purpose.
+- Storage location.
+- Retention configuration.
+- Access controls.
+- Deletion workflow.
+- Legal-hold capability where relevant.
+
+Use synthetic data by default.
+
+---
+
+# 12. Connector framework
+
+Every connector must define:
+
+- Operations.
+- Input schema.
+- Output schema.
+- Required authorization.
+- Integration mode.
+- Timeout.
+- Retry policy.
+- Retryable and terminal errors.
+- Idempotency support.
+- Freshness requirements.
+- Correlation identifiers.
+- Coverage limitations.
+
+Support the following adapter categories:
+
+- Authorized identity verification.
+- CKYCR-related evidence.
+- DigiLocker/issuer-issued documents.
+- Account Aggregator financial records.
+- Licensed credit bureau.
+- Authorized tax/GST evidence.
+- Property registration records.
+- CERSAI-related evidence.
+- Applicable RERA evidence.
+- Valuation provider.
+- Sanctions/PEP screening.
+
+Clearly distinguish:
+
+- LIVE
+- SANDBOX
+- SIMULATED
+- UNAVAILABLE
+
+Do not imply universal public API availability.
+
+Implement deterministic fixtures for unavailable integrations using the same interfaces as actual adapters.
+
+A provider outage must produce a typed unresolved dependency, not a pass or a fabricated response.
+
+---
+
+# 13. Document ingestion and processing
+
+Implement a secure document lifecycle:
+
+1. Upload validation.
+2. Storage.
+3. Hashing.
+4. Processing job.
+5. Text extraction.
+6. OCR when needed and supported.
+7. Structured field extraction.
+8. Validation.
+9. Evidence creation.
+10. Conflict checks.
+11. Review or automatic acceptance according to policy.
+
+Support common financial and property documents.
+
+Preserve:
+
+- Original document.
+- Version.
+- Extracted text.
+- Extracted fields.
+- Page references.
+- Extraction method.
+- Confidence/validation state.
+- Model/parser version.
+
+Validate MIME type and content signatures, not just filenames.
+
+Handle:
+
+- Password-protected PDFs.
+- Malformed files.
+- Oversized uploads.
+- Unsupported formats.
+- Empty/scanned documents.
+- Extraction failures.
+
+For malware scanning, provide a real integration if available or a clearly documented unimplemented production dependency. Never show a fake “virus scan passed.”
+
+---
+
+# 14. Document integrity and verification
+
+Separate these concepts:
+
+- Successfully parsed.
+- Successfully extracted.
+- Internally consistent.
+- Matched to another source.
+- Issuer verified.
+- Cryptographically validated.
+
+Do not merge them into a single “verified” flag.
+
+Implement meaningful checks where supported:
+
+- Arithmetic consistency.
+- Duplicate hashes.
+- Field disagreement.
+- Suspicious editing indicators.
+- Digital signature validation.
+- Issuer reference verification.
+
+Unsupported methods must display “not performed.”
+
+A document hash proves consistency with recorded bytes, not authenticity.
+
+Treat all document text as untrusted. Embedded instructions must not alter system prompts, call tools, change policy, or access secrets.
+
+---
+
+# 15. Financial normalization
+
+Normalize transaction data into a documented schema.
+
+Classify:
+
+- Salary.
+- Business receipts.
+- Transfers.
+- Loan proceeds.
+- Refunds.
+- Reimbursements.
+- Cash deposits.
+- EMI repayments.
+- Other recurring obligations.
+- Exceptional inflows.
+
+Preserve uncertain classifications.
+
+Implement:
+
+- Recurring-income detection.
+- Seasonal-income summaries.
+- Income volatility.
+- Exceptional-inflow exclusion under policy.
+- Obligation reconciliation.
+- Duplicate obligation detection.
+- Evidence coverage checks.
+
+Do not count transfers between an applicant’s own accounts as new income.
+
+Do not automatically treat every recurring credit as salary.
+
+Show how accepted income differs from declared income.
+
+---
+
+# 16. Financial calculations
+
+Implement unit-tested calculations for:
+
+- EMI.
+- FOIR.
+- Total repayment.
+- Total interest.
+- Monthly surplus.
+- Eligible principal under a fixed affordability constraint.
+- LTV under the selected policy.
+- Scenario-specific results.
+
+FOIR:
+
+```text
+(existing monthly obligations + proposed EMI)
+÷ verified eligible monthly income
+```
+
+Handle:
+
+- Zero interest.
+- Zero or negative income.
+- Invalid tenure.
+- Extremely large values.
+- Currency precision.
+- Rounding.
+- Missing inputs.
+- Co-applicant treatment.
+- Duplicate obligations.
+
+Use the applicable regulatory definition for regulated calculations. Keep simplified demonstration calculations explicitly labeled.
+
+Do not assume that Home Loan LTV limits apply identically to LAP.
+
+---
+
+# 17. Policy engine
+
+Implement a versioned rule engine using readable decision tables or a safe rule schema.
+
+Do not execute arbitrary user-provided Python or JavaScript as policy.
+
+Each rule must contain:
+
+- ID.
+- Name.
+- Description.
+- Product.
+- Applicant category.
+- Authority classification.
+- Source reference.
+- Effective dates.
+- Inputs.
+- Operator.
+- Threshold.
+- Missing-data behavior.
+- Severity.
+- Result mapping.
+- Reason code.
+- Override policy.
+- Approval metadata.
+
+Authority classifications:
+
+- Regulatory requirement.
+- Internal credit policy.
+- Demonstration assumption.
+
+Never present invented thresholds as actual Hero Housing Finance policy.
+
+Validate policy packs before activation:
+
+- Schema.
+- Effective-date conflicts.
+- Missing inputs.
+- Invalid references.
+- Unsupported operators.
+- Contradictory rules.
+- Broken product applicability.
+
+Implement draft, validated, approved, active, and retired states.
+
+Use a controlled activation process.
+
+---
+
+# 18. Regulatory-control registry
+
+Research current official primary sources before encoding regulatory requirements.
+
+For every encoded control, preserve:
+
+- Authority.
+- Document title.
+- URL.
+- Relevant clause.
+- Retrieval date.
+- Effective date.
+- Applicability.
+- Interpretation.
+- Executable check.
+- Required evidence.
+- Failure behavior.
+- Responsible owner.
+
+Do not convert ambiguous legal language into a confident automated rule without documenting the interpretation.
+
+If current sources cannot be verified, label the control as awaiting validation.
+
+Support applicable areas such as:
+
+- HFC requirements.
+- KYC/AML.
+- Fair Practices Code.
+- Digital-lending disclosures.
+- Data handling.
+- Audit records.
+- Property-related prerequisites.
+
+Do not claim legal certification.
+
+Explicitly represent required official-led KYC or professional checks. Do not claim an LLM replaces all such obligations.
+
+---
+
+# 19. Identity, screening, and fraud
+
+Implement:
+
+- Identity-field consistency.
+- Duplicate application detection.
+- Document reuse.
+- Income contradictions.
+- Suspicious transaction patterns.
+- Relationship analysis.
+- Screening matches.
+- Review dependencies.
+
+Keep separate:
+
+- Anomaly.
+- Potential match.
+- Confirmed finding.
+- Required review.
+- Technical failure.
+
+A fuzzy screening match must not automatically become a confirmed sanctions finding.
+
+A PEP indication must not automatically become a rejection.
+
+Shared addresses, employers, or devices are not sufficient proof of fraud.
+
+For graph-style analysis, use permitted identifiers and explain every relationship.
+
+Do not add covert device fingerprinting, contact scraping, or unsupported profiling.
+
+Restrict sensitive fraud/AML details from borrower-facing outputs.
+
+---
+
+# 20. Property assessment
+
+Implement a bounded, explicit demonstration coverage area.
+
+Support:
+
+- Property identifier.
+- Address.
+- Property type.
+- Ownership evidence.
+- Area.
+- Registered interests.
+- Applicable approvals.
+- Legal-report status.
+- Valuation-report status.
+- Comparable-property evidence.
+- Accepted collateral value.
+- Uncertainty and coverage.
+
+Do not claim nationwide automated title verification.
+
+An automated valuation estimate does not prove ownership or legal title.
+
+If sufficient training data is unavailable, implement a transparent comparable-based assessment or simulated provider response.
+
+Do not build a fake “AI valuation” whose output is an arbitrary multiplier.
+
+---
+
+# 21. Credit-risk modeling
+
+Build a reproducible pipeline.
+
+Begin with an interpretable baseline:
+
+- Logistic regression, or
+- A clearly labeled policy scorecard.
+
+Add XGBoost only when the data and evaluation support a meaningful comparison.
+
+Document:
+
+- Prediction target.
+- Horizon.
+- Label definition.
+- Feature definitions.
+- Dataset provenance.
+- Licensing.
+- Preprocessing.
+- Splitting strategy.
+- Leakage controls.
+- Calibration.
+- Evaluation.
+- Limitations.
+
+Avoid applicant overlap across splits.
+
+Use temporal evaluation where data supports it.
+
+Do not train on fields unavailable at decision time.
+
+If the data is synthetic:
+
+- Label it throughout.
+- Report synthetic evaluation as synthetic.
+- Do not claim real-world mortgage-default accuracy.
+- Do not present an unvalidated model output as a reliable production PD.
+
+Display feature attribution with correct units.
+
+Do not interpret SHAP values as percentages unless the selected output representation supports that interpretation.
+
+Monitor model-input validity and out-of-distribution conditions.
+
+---
+
+# 22. Deterministic decision service
+
+The final decision must be produced by explicit logic.
+
+An approval requires:
+
+- Mandatory identity requirements satisfied.
+- Required evidence complete and current.
+- No unresolved blocking conflicts.
+- Affordability requirements satisfied.
+- Applicable credit-policy requirements satisfied.
+- Property prerequisites satisfied.
+- Mandatory compliance controls satisfied.
+- Authorized automated-decision scope.
+
+A favorable risk model must not override a failed mandatory gate.
+
+Define decision precedence explicitly.
+
+A verified terminal rejection condition should not be hidden by unrelated optional missing information.
+
+A missing mandatory result must not become a pass.
+
+Persist:
+
+- Decision.
+- Reason codes.
+- Rule results.
+- Feature snapshot.
+- Policy version.
+- Model version.
+- Evidence revision.
+- Timestamp.
+- Decision-engine version.
+
+---
+
+# 23. Contradiction engine
+
+Implement conflicts such as:
+
+- Declared income versus bank evidence.
+- Salary slip versus tax evidence.
+- Applicant identity versus property record.
+- Property-area disagreement.
+- Ownership mismatch.
+- Conflicting valuations.
+- Reused documents across unrelated cases.
+
+Every conflict must show:
+
+- Facts compared.
+- Sources.
+- Severity.
+- Relevant rule.
+- Decision effect.
+- Resolution options.
+
+Do not arbitrarily choose the most favorable evidence.
+
+Support resolution through corrected or additional evidence, with history preserved.
+
+---
+
+# 24. Next-best evidence request
+
+Implement a transparent resolver that identifies which permitted evidence can resolve a blocker.
+
+Rank using explicit criteria:
+
+- Mandatory prerequisite.
+- Ability to resolve the specific conflict.
+- Borrower effort.
+- Provider availability.
+- Redundancy.
+- Freshness.
+
+Do not pretend to have trained an information-gain model unless one actually exists and is evaluated.
+
+Explain the request in plain language.
+
+Prevent unnecessary repeated requests for evidence already available and valid.
+
+---
+
+# 25. Alternative-offer engine
+
+When the requested terms fail affordability or permitted collateral constraints, calculate valid scenarios for:
+
+- Reduced principal.
+- Permitted tenure.
+- EMI.
+- FOIR.
+- Total repayment.
+- Total interest.
+- LTV.
+- Remaining blockers.
+
+All scenarios must obey the selected policy pack.
+
+Do not change borrower terms without acceptance.
+
+Do not call a scenario an approved offer until all required checks pass.
+
+A lower EMI may increase total interest; disclose both.
+
+Do not use alternative terms to bypass unresolved KYC, fraud, property, or legal requirements.
+
+---
+
+# 26. Stress testing
+
+Implement labeled hypothetical scenarios:
+
+- Income reduction.
+- Rate increase where applicable.
+- Seasonal low-income periods.
+- Combined income/rate stress.
+- Collateral-value reduction.
+
+Show before/after:
+
+- EMI.
+- FOIR.
+- Monthly surplus.
+- LTV.
+- Policy result.
+
+Scenarios are not forecasts.
+
+Any impact on approval must come from an explicit configured rule.
+
+---
+
+# 27. Evidence dependency tracking
+
+Represent relationships between:
+
+```text
+evidence → extracted facts → normalized features
+→ calculations → controls → assessment → decision
+```
+
+When evidence changes:
+
+1. Create a new revision.
+2. Identify dependent results.
+3. Invalidate affected caches.
+4. Schedule reassessment.
+5. Preserve the old decision.
+6. Create a new assessment.
+7. Explain the differences.
+
+Do not mutate historical feature snapshots.
+
+Use optimistic concurrency or another explicit strategy to prevent stale writes.
+
+---
+
+# 28. Audit and historical replay
+
+Implement append-only business events with:
+
+- Event identifier.
+- Actor.
+- Role.
+- Application.
+- Action.
+- Timestamp.
+- Correlation identifier.
+- Before/after references.
+- Reason.
+- Relevant version identifiers.
+
+If implementing hash chaining, document its limitations. Hash chaining alone does not protect against an attacker rewriting an entire database and chain.
+
+Historical replay must use stored:
+
+- Evidence snapshot.
+- Extracted facts.
+- Feature values.
+- Policy version.
+- Model/preprocessing artifacts.
+- Calculation version.
+
+Replay must not call current external providers.
+
+Do not rerun nondeterministic LLM extraction and assume it will match. Preserve the actual extraction output used.
+
+Report whether replay reproduced:
+
+- Decision.
+- Reason codes.
+- Calculations.
+- Rule results.
+
+---
+
+# 29. Policy impact simulation
+
+Allow authorized users to evaluate a proposed policy against selected stored applications.
+
+Show:
+
+- Changed outcomes.
+- Changed rules.
+- Approval/rejection/referral counts.
+- Distribution changes.
+- Exceptions.
+- Validation errors.
+
+Do not overwrite original decisions.
+
+Do not label simulated approval-rate changes as proven business gains.
+
+Require authorized activation after simulation.
+
+---
+
+# 30. Corrections and review
+
+Borrowers must be able to submit corrections.
+
+Reviewers must be able to:
+
+- Inspect supporting evidence.
+- Resolve permitted tasks.
+- Request evidence.
+- Record findings.
+- Trigger reassessment.
+
+No silent overrides.
+
+Non-overridable controls must remain non-overridable.
+
+Every authorized exception must record:
+
+- Actor.
+- Authority.
+- Reason.
+- Supporting evidence.
+- Affected rule.
+- Scope.
+- Timestamp.
+
+Preserve original and revised assessments.
+
+---
+
+# 31. Concentration and disbursement readiness
+
+Implement configurable exposure scenarios across:
+
+- Project.
+- Developer.
+- Employer.
+- Locality.
+
+Use clearly labeled synthetic portfolio data where necessary.
+
+Track disbursement prerequisites separately:
+
+- Accepted terms.
+- Required documents.
+- Current verification evidence.
+- Property/legal requirements.
+- Outstanding conditions.
+- No blocking control failures.
+
+Do not implement real fund movement.
+
+Do not confuse digitally generating a sanction preview with issuing a legally executed sanction.
+
+If cryptographic document signing is not integrated, label generated documents accordingly.
+
+---
+
+# 32. Explanations and reports
+
+Provide:
+
+### Borrower explanation
+
+- Outcome.
+- Appropriate reasons.
+- Required next steps.
+- Accepted/requested terms.
+- Relevant disclosures.
+
+### Analyst explanation
+
+- Calculations.
+- Evidence conflicts.
+- Model interpretation.
+- Rule results.
+- Outstanding tasks.
+
+### Auditor explanation
+
+- Full permitted provenance.
+- Version history.
+- Actor actions.
+- Control results.
+- Replay information.
+
+Generate an evidence pack in:
+
+- JSON.
+- Readable HTML or PDF.
+
+Redact sensitive data according to role.
+
+If an LLM drafts explanations:
+
+- Give it only authorized structured facts.
+- Require a constrained output schema.
+- Validate numerical claims.
+- Reject unsupported reasons.
+- Use deterministic templates as fallback.
+
+The application must remain usable without an LLM API key.
+
+---
+
+# 33. API design
+
+Provide documented, versioned APIs.
+
+Suggested capabilities:
+
+```text
+POST   /api/v1/applications
+GET    /api/v1/applications
+GET    /api/v1/applications/{id}
+PATCH  /api/v1/applications/{id}
+
+POST   /api/v1/applications/{id}/submit
+POST   /api/v1/applications/{id}/consents
+POST   /api/v1/applications/{id}/documents
+GET    /api/v1/applications/{id}/evidence
+GET    /api/v1/applications/{id}/conflicts
+
+POST   /api/v1/applications/{id}/assessments
+GET    /api/v1/assessments/{id}
+GET    /api/v1/assessments/{id}/decision
+GET    /api/v1/assessments/{id}/explanation
+GET    /api/v1/assessments/{id}/evidence-pack
+POST   /api/v1/assessments/{id}/replay
+
+POST   /api/v1/applications/{id}/alternative-scenarios
+POST   /api/v1/applications/{id}/stress-scenarios
+
+GET    /api/v1/review-tasks
+POST   /api/v1/review-tasks/{id}/actions
+
+GET    /api/v1/policies
+POST   /api/v1/policies
+POST   /api/v1/policies/{id}/validate
+POST   /api/v1/policies/{id}/simulate
+POST   /api/v1/policies/{id}/approve
+POST   /api/v1/policies/{id}/activate
+
+GET    /health/live
+GET    /health/ready
+```
+
+Adapt paths if necessary, preserving consistent semantics.
+
+For asynchronous operations:
+
+- Return an operation/assessment identifier.
+- Expose status.
+- Report partial progress from actual jobs.
+- Support safe retries.
+
+Use:
+
+- Pagination.
+- Input validation.
+- Stable error codes.
+- Correlation IDs.
+- Appropriate HTTP statuses.
+- Idempotency keys for applicable commands.
+- OpenAPI-generated contracts where practical.
+
+Do not expose raw stack traces or provider secrets to clients.
+
+---
+
+# 34. Reliability and concurrency
+
+Implement:
+
+- Bounded timeouts.
+- Retry with backoff.
+- Retryable error classification.
+- Duplicate-job handling.
+- Idempotent side effects.
+- Dead-letter or failed-job visibility.
+- Database transactions.
+- Graceful shutdown.
+- Readiness checks.
+- Connection pooling.
+- Backpressure where appropriate.
+
+Do not promise exactly-once execution unless actually guaranteed. Design for at-least-once delivery with idempotent processing.
+
+When a database write must trigger a job, use a reliable mechanism such as a transactional outbox or document the chosen consistency strategy.
+
+Test worker interruption and recovery.
+
+---
+
+# 35. Observability
+
+Implement structured logs with:
+
+- Request ID.
+- Correlation ID.
+- Assessment ID.
+- Module.
+- Event.
+- Duration.
+- Error category.
+
+Avoid raw PII in logs.
+
+Provide useful metrics:
+
+- Assessment duration.
+- Queue wait.
+- Provider duration.
+- Provider failures.
+- Retry counts.
+- Approval/rejection/referral counts.
+- Referral reasons.
+- Evidence-conflict counts.
+- Replay mismatches.
+- Model-input validation failures.
+
+Separate real measurements from seeded demonstration charts.
+
+Do not display fake operational history.
+
+---
+
+# 36. Security
+
+Address:
+
+- Broken object-level authorization.
+- Cross-organization access.
+- Unsafe uploads.
+- SQL injection.
+- Cross-site scripting.
+- CSRF where applicable.
+- SSRF.
+- Excessive API access.
+- Secret leakage.
+- Prompt injection.
+- Unrestricted exports.
+- Unsafe logs.
+- Dependency vulnerabilities.
+
+Do not fetch arbitrary URLs found in documents.
+
+For signed upload/download URLs, use bounded expiry and scoped permissions.
+
+Provide a concise threat model and document residual risks.
+
+A dependency scan is not a complete penetration test. Describe verification accurately.
+
+---
+
+# 37. UI and visual standards
+
+Build a serious lending-operations interface.
+
+Visual direction:
+
+- Warm neutral or white surfaces.
+- Deep charcoal typography.
+- Restrained terracotta or dark red accent.
+- Clear hierarchy.
+- Compact financial tables.
+- Readable evidence panels.
+- Accessible contrast.
+- Visible keyboard focus.
+- Responsive layouts.
+- Consistent spacing.
+
+Avoid:
+
+- Neon gradients.
+- Excessive glass effects.
+- Decorative AI imagery.
+- Oversized empty cards.
+- Unreadable relationship graphs.
+- Fake corporate endorsements.
+- Marketing claims unsupported by results.
+
+Required screens:
+
+1. Borrower application.
+2. Application queue.
+3. Application overview.
+4. Evidence explorer.
+5. Contradiction view.
+6. Financial assessment.
+7. KYC/fraud assessment.
+8. Property assessment.
+9. Decision explanation.
+10. Evidence requests.
+11. Alternative offers.
+12. Stress testing.
+13. Policy studio.
+14. Policy simulation.
+15. Audit timeline.
+16. Historical replay.
+17. System/evaluation monitoring.
+
+Every important screen needs usable loading, empty, failure, and retry states.
+
+Use visualizations only where they improve understanding.
+
+---
+
+# 38. Demonstration data
+
+Create deterministic synthetic fixtures for:
+
+1. Complete salaried Home Loan.
+2. Self-employed LAP with seasonal earnings.
+3. Affordability failure.
+4. Income contradiction.
+5. Property ownership uncertainty.
+6. Ambiguous screening match.
+7. Provider outage.
+8. Expired evidence.
+9. Revised valuation.
+10. Policy update.
+11. Borrower correction.
+12. Duplicate obligation.
+13. Shared document across applications.
+14. Embedded malicious document instructions.
+15. Unauthorized document-access attempt.
+16. Concurrent reassessment.
+
+Every fixture must use the actual pipeline.
+
+Do not force outcomes by applicant ID.
+
+Use fixed seeds for reproducibility.
+
+Provide a safe demo-reset command restricted to the development dataset.
+
+Maintain a data manifest recording:
+
+- Synthetic versus external.
+- Source.
+- License.
+- Generation method.
+- Intended use.
+- Limitations.
+
+---
+
+# 39. Evaluation and tests
+
+Implement meaningful unit, integration, and end-to-end tests.
+
+### Unit tests
+
+Cover:
+
+- Financial arithmetic.
+- Edge cases.
+- Policy boundaries.
+- Missing-data behavior.
+- Decision precedence.
+- Alternative-offer constraints.
+- Reason-code generation.
+
+### Integration tests
+
+Cover:
+
+- Connector fixtures.
+- Timeouts.
+- Document processing.
+- Persistence.
+- Job retries.
+- Consent enforcement.
+- Evidence invalidation.
+- Audit creation.
+- Replay.
+- Export redaction.
+
+### End-to-end tests
+
+Cover:
+
+- New application to decision.
+- Evidence request to reassessment.
+- Financial input change.
+- Property-value change.
+- Policy simulation.
+- Historical replay.
+- Borrower correction.
+- Unauthorized access.
+- Worker/provider failure.
+
+### Model evaluation
+
+Only report metrics appropriate to available data and target labels.
+
+Where justified, include:
+
+- Discrimination.
+- Calibration.
+- Threshold behavior.
+- Subgroup performance where lawful and meaningful.
+- Temporal robustness.
+- Uncertainty.
+
+Synthetic evaluation must be labeled synthetic.
+
+### Performance
+
+Measure:
+
+- Median latency.
+- Tail latency.
+- Queue time.
+- Provider waiting.
+- Engine execution.
+- Concurrent workload behavior.
+
+Document machine, configuration, workload, and measurement method.
+
+Do not invent performance targets as achieved results.
+
+---
+
+# 40. Deployment and operations
+
+Provide Docker Compose for:
+
+- Frontend.
+- API.
+- Worker.
+- PostgreSQL.
+- Redis if used.
+- Object storage if used.
+
+The application should have a documented startup path with minimal manual steps.
+
+Provide:
+
+- Health checks.
+- Migration command.
+- Seed command.
+- Test command.
+- Development credentials.
+- Environment template.
+- Backup procedure.
+- Restore procedure.
+- Log access.
+- Troubleshooting guide.
+- Rollback considerations.
+
+Test backup/restore locally if feasible and report whether it was actually tested.
+
+Do not automatically provision paid infrastructure.
+
+Keep production settings separate from development defaults.
+
+---
+
+# 41. Documentation
+
+Create:
+
+- README.
+- Architecture document.
+- Data-flow diagram.
+- Entity relationship diagram.
+- Decision logic explanation.
+- Policy schema guide.
+- Regulatory source register.
+- Integration matrix.
+- Model card.
+- Dataset manifest.
+- Threat model.
+- Test/evaluation report.
+- Operations runbook.
+- Demo script.
+- Production-readiness matrix.
+
+Write precise, professional language.
+
+Explain the actual system:
+
+- What problem it solves.
+- Who uses it.
+- How evidence becomes a decision.
+- How uncertainty is handled.
+- How to run it.
+- How to verify it.
+- What is simulated.
+- What remains a production dependency.
+
+Do not hide limitations to make the project sound stronger.
+
+---
+
+# 42. Production-readiness matrix
+
+For each area, record status and evidence:
+
+| Area | Required distinction |
+|---|---|
+| Application workflow | Implemented and tested versus incomplete |
+| Integrations | Live, sandbox, simulated, unavailable |
+| Credit model | Validated on relevant data versus demonstration |
+| Policies | Verified requirement versus illustrative assumption |
+| Security | Implemented control versus independently assessed control |
+| Reliability | Tested locally versus verified in deployment |
+| Regulatory fit | Mapped controls versus legal/compliance sign-off |
+| Operations | Documented versus exercised recovery procedures |
+
+Do not use this matrix as an excuse to leave software incomplete.
+
+Complete all feasible local functionality. Clearly separate software completeness from external production approvals.
+
+---
+
+# 43. Implementation order
+
+Proceed in dependency order:
+
+1. Workspace inspection.
+2. Shared schemas and architecture.
+3. Database and migrations.
+4. Financial calculations.
+5. Policy engine.
+6. Decision service.
+7. Connector fixtures.
+8. Evidence persistence.
+9. Complete Home Loan vertical slice.
+10. Complete LAP/self-employed slice.
+11. Document processing.
+12. Contradiction detection.
+13. KYC/fraud/property modules.
+14. Risk modeling.
+15. Evidence requests.
+16. Alternative offers and stress testing.
+17. Evidence dependency tracking.
+18. Audit and replay.
+19. Policy simulation and controlled activation.
+20. Borrower corrections and review.
+21. Concentration/disbursement conditions.
+22. UI completion.
+23. Security and reliability checks.
+24. End-to-end testing.
+25. Browser inspection.
+26. Documentation and final handoff.
+
+Maintain a traceability checklist connecting each requirement to:
+
+- Implementation location.
+- API/UI behavior.
+- Test.
+- Current status.
+
+Do not mark a requirement complete merely because a screen exists.
+
+---
+
+# 44. Acceptance criteria
+
+The application is functionally complete only when:
+
+- A user can create and submit an application.
+- Both products execute their own policies.
+- Evidence sources are visible.
+- Calculations use real inputs.
+- Missing evidence blocks relevant approvals.
+- Contradictions create actionable requests.
+- Provider failures remain explicit.
+- Risk outputs are honestly labeled.
+- Decisions are computed rather than hardcoded.
+- Explanations match actual results.
+- Alternative scenarios obey policy.
+- Evidence changes trigger reassessment.
+- Historical decisions remain preserved.
+- Replay reproduces stored outcomes.
+- Policy simulation does not overwrite history.
+- Role restrictions are enforced server-side.
+- Exports redact restricted information.
+- Core workflows pass automated tests.
+- The application can be started from documentation.
+- Simulated dependencies are clearly identified.
+- The README accurately describes implemented behavior.
+
+---
+
+# 45. Final demonstration story
+
+Prepare one coherent five-to-seven-minute demonstration:
+
+1. Open a self-employed LAP application.
+2. Show declared income and available evidence.
+3. Detect an income contradiction.
+4. Generate a targeted evidence request.
+5. Add the resolving evidence.
+6. Recalculate eligible income and affordability.
+7. Show a policy-permitted alternative amount.
+8. Display stress scenarios.
+9. Complete remaining checks.
+10. Generate the evidence-backed outcome.
+11. Change the property valuation.
+12. Show dependency-driven reassessment.
+13. Replay the original decision.
+14. Show that original and revised decisions remain distinct.
+
+Then briefly show:
+
+- A clean Home Loan straight-through approval.
+- A mandatory unresolved check causing referral.
+
+Do not manipulate the demo with hidden decision overrides.
+
+---
+
+# 46. Final response requirements
+
+After implementation, report:
+
+1. What was built.
+2. How to run it.
+3. How to access the UI.
+4. Demo accounts.
+5. Main demonstration scenarios.
+6. Integrations by mode.
+7. Tests executed and results.
+8. Measured performance.
+9. Model/data limitations.
+10. Unresolved defects or dependencies.
+11. Exact paths to documentation.
+12. Production-readiness boundaries.
+
+Do not claim completion if important flows remain disconnected or untested.
+
+Begin now by inspecting the workspace, establishing the requirement traceability checklist, and implementing Aadharshila end to end.

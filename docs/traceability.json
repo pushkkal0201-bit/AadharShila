@@ -1,0 +1,146 @@
+{
+  "project": "Aadharshila",
+  "scope": "Local synthetic mortgage underwriting demonstrator",
+  "requirements": [
+    {
+      "id": "R01",
+      "area": "Application intake, Home Loan and LAP",
+      "implementation": "src/aadharshila/main.py; web/app.js",
+      "test": "tests/test_api.py::test_seed_scenarios",
+      "status": "LOCALLY_TESTED"
+    },
+    {
+      "id": "R02",
+      "area": "Income and EMI/FOIR/LTV calculations",
+      "implementation": "src/aadharshila/finance.py",
+      "test": "tests/test_finance.py",
+      "status": "LOCALLY_TESTED"
+    },
+    {
+      "id": "R03",
+      "area": "Decision precedence, explanations",
+      "implementation": "src/aadharshila/engine.py",
+      "test": "tests/test_engine.py",
+      "status": "LOCALLY_TESTED"
+    },
+    {
+      "id": "R04",
+      "area": "Evidence provenance, expiry and conflict",
+      "implementation": "src/aadharshila/service.py",
+      "test": "tests/test_api.py::test_replay_unchanged_historical_assessment",
+      "status": "LOCALLY_TESTED"
+    },
+    {
+      "id": "R05",
+      "area": "Document ingestion and safe handling",
+      "implementation": "src/aadharshila/main.py",
+      "test": "tests/test_api.py::test_document_parse_does_not_verify",
+      "status": "LOCALLY_TESTED_LIMITED_FORMATS"
+    },
+    {
+      "id": "R06",
+      "area": "Authentication and borrower ownership",
+      "implementation": "src/aadharshila/security.py",
+      "test": "tests/test_api.py::test_cross_borrower_object_control",
+      "status": "LOCALLY_TESTED_DEVELOPMENT_ONLY"
+    },
+    {
+      "id": "R07",
+      "area": "Consent grant/revocation",
+      "implementation": "src/aadharshila/main.py",
+      "test": "tests/test_api.py::test_revocation_blocks_automatic_approval",
+      "status": "LOCALLY_TESTED"
+    },
+    {
+      "id": "R08",
+      "area": "Policy lifecycle and historical impact",
+      "implementation": "src/aadharshila/main.py",
+      "test": "tests/test_api.py::test_policy_separation_of_duties",
+      "status": "LOCALLY_TESTED"
+    },
+    {
+      "id": "R09",
+      "area": "Replay and audit",
+      "implementation": "src/aadharshila/service.py",
+      "test": "tests/test_api.py::test_replay_unchanged_historical_assessment",
+      "status": "LOCALLY_TESTED"
+    },
+    {
+      "id": "R10",
+      "area": "Reassessment queue / revisions",
+      "implementation": "src/aadharshila/worker.py",
+      "test": "tests/test_api.py::test_async_assessment_worker_recovery",
+      "status": "LOCALLY_TESTED_BASIC_WORKER"
+    },
+    {
+      "id": "R11",
+      "area": "External KYC, bureau, AA, GST, registry",
+      "implementation": "src/aadharshila/seed.py; docs/INTEGRATIONS.md",
+      "test": "tests/test_api.py::test_seed_scenarios",
+      "status": "SIMULATED_ONLY"
+    },
+    {
+      "id": "R12",
+      "area": "Regulatory control registry",
+      "implementation": "docs/REGULATORY_SOURCES.md",
+      "test": "none",
+      "status": "RESEARCH_ONLY_NEEDS_LEGAL_VALIDATION"
+    },
+    {
+      "id": "R13",
+      "area": "Credit default model",
+      "implementation": "docs/MODEL_CARD.md; src/aadharshila/engine.py",
+      "test": "tests/test_engine.py::test_clean_application_approved",
+      "status": "ILLUSTRATIVE_RULE_BAND_NOT_TRAINED"
+    },
+    {
+      "id": "R14",
+      "area": "Digital signature verification / malware scanning",
+      "implementation": "docs/THREAT_MODEL.md",
+      "test": "none",
+      "status": "OUTSTANDING"
+    },
+    {
+      "id": "R15",
+      "area": "Production provider integrations / security audit",
+      "implementation": "docs/PRODUCTION_READINESS.md",
+      "test": "none",
+      "status": "OUTSTANDING"
+    },
+    {
+      "id": "R16",
+      "area": "Disbursement and legal sanction",
+      "implementation": "none",
+      "test": "none",
+      "status": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "R17",
+      "area": "Authenticated document download and integrity verification",
+      "implementation": "src/aadharshila/main.py",
+      "test": "tests/test_next_stage.py::test_document_download_scoped_and_hash_checked",
+      "status": "LOCALLY_TESTED"
+    },
+    {
+      "id": "R18",
+      "area": "Decision difference and next useful evidence",
+      "implementation": "src/aadharshila/main.py; web/app.js",
+      "test": "tests/test_next_stage.py::test_history_delta_and_ranked_evidence_requests",
+      "status": "LOCALLY_TESTED"
+    },
+    {
+      "id": "R19",
+      "area": "Windows project portability and CI",
+      "implementation": "scripts/windows; *.bat; .github/workflows/quality.yml",
+      "test": "tests/test_next_stage.py::test_development_scripts_present_and_portable",
+      "status": "SCRIPTS_SOURCE_TESTED_NOT_WINDOWS_EXECUTED"
+    },
+    {
+      "id": "R20",
+      "area": "Borrower-sensitive output redaction",
+      "implementation": "src/aadharshila/main.py",
+      "test": "tests/test_next_stage.py::test_borrower_report_and_audit_redact_screening_details",
+      "status": "LOCALLY_TESTED"
+    }
+  ]
+}

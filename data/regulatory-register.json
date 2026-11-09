@@ -1,0 +1,5 @@
+[
+  {"code":"HFC_DIRECTIONS","name":"Housing Finance Companies Directions","authority":"Reserve Bank of India","version":"2025 directions, updated 1 October 2026","area":"HFC / Fair Practices Code","url":"https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12939","status":"AWAITING_CLAUSE_VALIDATION","auto_control":false},
+  {"code":"NBFC_KYC","name":"Non-Banking Financial Companies – KYC Directions","authority":"Reserve Bank of India","version":"2025 directions, updated 29 December 2025","area":"KYC / AML","url":"https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12943","status":"AWAITING_CLAUSE_VALIDATION","auto_control":false},
+  {"code":"DIGITAL_LENDING","name":"Digital Lending Directions","authority":"Reserve Bank of India","version":"Issued 8 May 2025","area":"Disclosures, consent and borrower rights","url":"https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12848","status":"AWAITING_CLAUSE_VALIDATION","auto_control":false}
+]

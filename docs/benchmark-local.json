@@ -1,0 +1,12 @@
+{
+  "workload": "In-process pure deterministic underwriting engine; no I/O, web, queue or real providers",
+  "machine": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "python": "3.13.5",
+  "case_count": 16,
+  "total_evaluations": 480,
+  "median_ms": 0.1274,
+  "p95_ms": 0.4416,
+  "max_ms": 1.1279,
+  "outcome_mismatches": 0,
+  "important_limit": "Not an HTTP endpoint or production STP latency benchmark."
+}
