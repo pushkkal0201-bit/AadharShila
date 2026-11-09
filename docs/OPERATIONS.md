@@ -65,3 +65,9 @@ Document volume must be backed up separately and kept in sync with database refe
 ## Rollback
 
 Database schema changes should use reviewed versioned migrations with backups and a planned forward/backward compatibility window. Historical decision snapshots must not be deleted or silently rewritten. No rollback or restore drill was performed in this authoring environment.
+
+## Additional development recovery and provider notes
+
+Use `python -m aadharshila.recovery backup/verify/restore` for SQLite on either Windows or Linux; see `docs/RECOVERY_DRILL.md`. Docker Compose PostgreSQL backup/drill scripts are `scripts/docker_backup.sh` and `scripts/docker_restore_drill.sh` and run in GitHub CI. Untrusted providers cannot be enabled by specifying arbitrary URLs through an API; the signed partner contract is configured through environment variables and a strict HTTPS host allowlist. See `docs/PROVIDER_ONBOARDING.md`.
+
+`APP_ENV=production` enforces a governance referral condition; no actual approval is permitted by the current code even if all evidence flags read LIVE. Independent lender-policy, legal and security authorizations remain unfulfilled.

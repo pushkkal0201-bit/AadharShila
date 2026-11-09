@@ -93,6 +93,23 @@ def serialize_assessment(a):
     return dict(id=a.id,application_id=a.application_id,outcome=a.outcome,revision=a.revision,created_at=a.created_at.isoformat() if a.created_at else None,
         engine_version=a.engine_version,result=a.result)
 
+BORROWER_RESTRICTED_REASONS={'SCREENING_POTENTIAL_MATCH','TECHNICAL_FAILURE','DOCUMENT_REUSE_REVIEW','PROVIDER_UNAVAILABLE'}
+
+def borrower_result(result):
+    """Borrower projection: never export internal screening, fraud or provider failure details."""
+    return {'outcome':result['outcome'],
+            'reasons':[r['explanation'] for r in result['reasons']
+                       if r['code'] not in BORROWER_RESTRICTED_REASONS
+                       and r.get('category') not in {'screening','fraud'}],
+            'policy_version':result['policy_version'],
+            'evidence_revision':result['evidence_revision'],
+            'note':result['note']}
+
+def serialize_for(user,assessment):
+    result=serialize_assessment(assessment)
+    if user.role=='BORROWER':result['result']=borrower_result(assessment.result)
+    return result
+
 def can_view(user,a):
     if a.org_id!=user.org_id:raise HTTPException(status_code=404,detail='Application not found')
     if user.role=='BORROWER' and a.owner_id!=user.id:raise HTTPException(status_code=404,detail='Application not found')
@@ -189,7 +206,7 @@ def add_participant(id:str,body:ParticipantCreate,db:Session=Depends(get_db),use
 @app.get('/api/v1/applications/{id}')
 def detail(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
     a=load_app(db,id,user);latest=latest_assessment(db,id)
-    return {'application':serialize_app(a),'latest_assessment':serialize_assessment(latest) if latest else None}
+    return {'application':serialize_app(a),'latest_assessment':serialize_for(user,latest) if latest else None}
 
 class ApplicationPatch(BaseModel):
     applicant_name:str|None=Field(default=None,min_length=2,max_length=150)
@@ -220,7 +237,7 @@ def submit(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
     if a.workflow!='DRAFT':raise HTTPException(409,'Application already submitted')
     a.workflow='SUBMITTED';audit(db,a.id,user,'APPLICATION_SUBMITTED')
     assessed=build_assessment(db,a,user);db.commit()
-    return serialize_assessment(assessed)
+    return serialize_for(user,assessed)
 
 @app.post('/api/v1/applications/{id}/consents')
 def add_consent(id:str,body:ConsentRequest,db:Session=Depends(get_db),user:User=Depends(current_user)):
@@ -237,7 +254,9 @@ def add_consent(id:str,body:ConsentRequest,db:Session=Depends(get_db),user:User=
 @app.get('/api/v1/applications/{id}/evidence')
 def evidence_list(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
     a=load_app(db,id,user)
-    return {'revision':a.revision,'evidence':collect_snapshot(db,a)['evidence'],'consents':collect_snapshot(db,a)['consents']}
+    snapshot=collect_snapshot(db,a)
+    visible=snapshot['evidence'] if user.role!='BORROWER' else {k:v for k,v in snapshot['evidence'].items() if k!='screening'}
+    return {'revision':a.revision,'evidence':visible,'consents':snapshot['consents']}
 
 @app.post('/api/v1/applications/{id}/evidence')
 def add_evidence(id:str,body:EvidenceRequest,db:Session=Depends(get_db),user:User=Depends(current_user)):
@@ -257,7 +276,7 @@ def add_evidence(id:str,body:EvidenceRequest,db:Session=Depends(get_db),user:Use
     e=Evidence(application_id=id,key=body.key,value=body.value,mode=body.mode,verification=body.verification,provider=body.provider,revision=a.revision)
     db.add(e);db.flush()
     assessment=build_assessment(db,a,user) if a.workflow!='DRAFT' else None
-    db.commit();return {'evidence_id':e.id,'revision':a.revision,'assessment':serialize_assessment(assessment) if assessment else None}
+    db.commit();return {'evidence_id':e.id,'revision':a.revision,'assessment':serialize_for(user,assessment) if assessment else None}
 
 @app.get('/api/v1/applications/{id}/conflicts')
 def conflicts(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
@@ -268,7 +287,7 @@ def conflicts(id:str,db:Session=Depends(get_db),user:User=Depends(current_user))
 def assess(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
     require_editor(user);a=load_app(db,id,user)
     if a.workflow=='DRAFT':raise HTTPException(409,'Submit application first')
-    ass=build_assessment(db,a,user);db.commit();return serialize_assessment(ass)
+    ass=build_assessment(db,a,user);db.commit();return serialize_for(user,ass)
 
 @app.post('/api/v1/applications/{id}/queue-reassessment')
 def queue_reassessment(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
@@ -291,21 +310,20 @@ def job_status(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)
 def history(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
     load_app(db,id,user)
     rows=db.scalars(select(Assessment).where(Assessment.application_id==id).order_by(Assessment.created_at,Assessment.revision)).all()
-    return {'items':[serialize_assessment(a) for a in rows]}
+    return {'items':[serialize_for(user,a) for a in rows]}
 
 @app.get('/api/v1/assessments/{id}')
 def assessment_detail(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
-    return serialize_assessment(get_assessment(db,id,user))
+    return serialize_for(user,get_assessment(db,id,user))
 @app.get('/api/v1/assessments/{id}/decision')
 def assessment_decision(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
     a=get_assessment(db,id,user)
+    if user.role=='BORROWER':return borrower_result(a.result)
     return {k:a.result[k] for k in ('outcome','reasons','policy_version','engine_version','evidence_revision','note')}
 @app.get('/api/v1/assessments/{id}/explanation')
 def explanation(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
     a=get_assessment(db,id,user)
-    if user.role=='BORROWER':
-        return {'outcome':a.outcome,'reasons':[r['explanation'] for r in a.result['reasons'] if r['code'] not in ('SCREENING_POTENTIAL_MATCH','TECHNICAL_FAILURE','DOCUMENT_REUSE_REVIEW')],
-                'message':a.result['note']}
+    if user.role=='BORROWER':return borrower_result(a.result)
     return a.result
 @app.post('/api/v1/assessments/{id}/replay')
 def replay_assessment(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
@@ -315,13 +333,12 @@ def replay_assessment(id:str,db:Session=Depends(get_db),user:User=Depends(curren
 def evidence_pack(id:str,format:str='json',db:Session=Depends(get_db),user:User=Depends(current_user)):
     a=get_assessment(db,id,user);app_row=load_app(db,a.application_id,user)
     if user.role=='BORROWER':
-        public={'outcome':a.outcome,'reasons':[r['explanation'] for r in a.result['reasons'] if r['code'] not in {'SCREENING_POTENTIAL_MATCH','DOCUMENT_REUSE_REVIEW','TECHNICAL_FAILURE'}],
-                'policy_version':a.result['policy_version'],'evidence_revision':a.revision,'note':a.result['note']}
+        public=borrower_result(a.result)
     else:public=a.result
     contents={'reference':app_row.reference,'assessment_id':a.id,'result':public,'snapshot':a.snapshot if user.role!='BORROWER' else {'application':{'reference':app_row.reference},'note':'Detailed evidence restricted'} }
     if format=='json':return contents
     if format!='html':raise HTTPException(422,'Use json or html')
-    borrower_hidden={'SCREENING_POTENTIAL_MATCH','TECHNICAL_FAILURE','DOCUMENT_REUSE_REVIEW'}
+    borrower_hidden=BORROWER_RESTRICTED_REASONS
     public_reasons=[r for r in a.result['reasons'] if user.role!='BORROWER' or r['code'] not in borrower_hidden]
     reason_html=''.join('<li>'+html.escape(r['explanation'])+'</li>' for r in public_reasons)
     return HTMLResponse(f'<!doctype html><meta charset="utf-8"><title>Aadharshila evidence report</title><main style="font-family:system-ui;max-width:760px;margin:40px auto"><h1>Aadharshila</h1><p>Demonstration assessment — not a sanction letter.</p><h2>{html.escape(app_row.reference)} — {html.escape(a.outcome)}</h2><p>Policy version {a.result["policy_version"]}; evidence revision {a.revision}</p><h3>Reasons</h3><ul>{reason_html}</ul><p>Generated from stored assessment evidence.</p></main>')
@@ -503,7 +520,16 @@ def download_document(id:str,document_id:str,db:Session=Depends(get_db),user:Use
     doc=db.get(Document,document_id)
     if not doc or doc.application_id!=id:raise HTTPException(404,'Document not found')
     root=UPLOADS.resolve()
-    stored=Path(doc.path).resolve()
+    recorded=Path(doc.path)
+    if recorded.is_absolute():
+        # Legacy absolute paths were used in the first local demo build.
+        # A restore to another drive resolves by the content-addressed document ID.
+        suffix='.pdf' if doc.media_type=='application/pdf' else '.txt'
+        stored=recorded.resolve()
+        if root not in stored.parents or not stored.is_file():
+            stored=(root/(doc.id+suffix)).resolve()
+    else:
+        stored=(root/recorded).resolve()
     if root not in stored.parents:raise HTTPException(409,'Storage path invalid')
     if not stored.is_file():raise HTTPException(404,'Document bytes unavailable')
     if stored.stat().st_size!=doc.byte_count or hashlib.sha256(stored.read_bytes()).hexdigest()!=doc.sha256:

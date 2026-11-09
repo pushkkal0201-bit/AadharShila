@@ -1,5 +1,72 @@
 [
-  {"code":"HFC_DIRECTIONS","name":"Housing Finance Companies Directions","authority":"Reserve Bank of India","version":"2025 directions, updated 1 October 2026","area":"HFC / Fair Practices Code","url":"https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12939","status":"AWAITING_CLAUSE_VALIDATION","auto_control":false},
-  {"code":"NBFC_KYC","name":"Non-Banking Financial Companies – KYC Directions","authority":"Reserve Bank of India","version":"2025 directions, updated 29 December 2025","area":"KYC / AML","url":"https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12943","status":"AWAITING_CLAUSE_VALIDATION","auto_control":false},
-  {"code":"DIGITAL_LENDING","name":"Digital Lending Directions","authority":"Reserve Bank of India","version":"Issued 8 May 2025","area":"Disclosures, consent and borrower rights","url":"https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12848","status":"AWAITING_CLAUSE_VALIDATION","auto_control":false}
+  {
+    "code": "HFC_DIRECTIONS",
+    "name": "Housing Finance Companies Directions",
+    "authority": "Reserve Bank of India",
+    "version": "2025 directions, updated 1 October 2026",
+    "area": "HFC / Fair Practices Code",
+    "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12939",
+    "status": "AWAITING_CLAUSE_VALIDATION",
+    "auto_control": false,
+    "retrieved_at": "2026-11-10",
+    "automatic_compliance_claim": false,
+    "review_owner": "Lender legal/compliance officer (unassigned)",
+    "interpretation_status": "REQUIRES_REGULATED_LENDER_VALIDATION"
+  },
+  {
+    "code": "NBFC_KYC",
+    "name": "Non-Banking Financial Companies – KYC Directions",
+    "authority": "Reserve Bank of India",
+    "version": "2025 directions, updated 29 December 2025",
+    "area": "KYC / AML",
+    "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12943",
+    "status": "AWAITING_CLAUSE_VALIDATION",
+    "auto_control": false,
+    "retrieved_at": "2026-11-10",
+    "automatic_compliance_claim": false,
+    "review_owner": "Lender legal/compliance officer (unassigned)",
+    "interpretation_status": "REQUIRES_REGULATED_LENDER_VALIDATION"
+  },
+  {
+    "code": "DIGITAL_LENDING",
+    "name": "Digital Lending Directions",
+    "authority": "Reserve Bank of India",
+    "version": "Issued 8 May 2025",
+    "area": "Disclosures, consent and borrower rights",
+    "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12848",
+    "status": "AWAITING_CLAUSE_VALIDATION",
+    "auto_control": false,
+    "retrieved_at": "2026-11-10",
+    "automatic_compliance_claim": false,
+    "review_owner": "Lender legal/compliance officer (unassigned)",
+    "interpretation_status": "REQUIRES_REGULATED_LENDER_VALIDATION"
+  },
+  {
+    "code": "NBFC_RBC",
+    "name": "Non-Banking Financial Companies – Responsible Business Conduct Directions",
+    "authority": "Reserve Bank of India",
+    "version": "2025 directions, updated July 1 2026",
+    "area": "Responsible lending, fair practices and KFS",
+    "url": "https://www.rbi.org.in/scripts/NotificationUser.aspx?Id=12942&Mode=0",
+    "retrieved_at": "2026-11-10",
+    "status": "AWAITING_CLAUSE_VALIDATION",
+    "auto_control": false,
+    "automatic_compliance_claim": false,
+    "review_owner": "Lender legal/compliance officer (unassigned)",
+    "interpretation_status": "REQUIRES_REGULATED_LENDER_VALIDATION"
+  },
+  {
+    "code": "NBFC_CREDIT",
+    "name": "Non-Banking Financial Companies – Credit Facilities Directions",
+    "authority": "Reserve Bank of India",
+    "version": "2025 directions, updated July 15 2026",
+    "area": "Credit facilities and digital lending",
+    "url": "https://rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+    "retrieved_at": "2026-11-10",
+    "status": "AWAITING_CLAUSE_VALIDATION",
+    "auto_control": false,
+    "automatic_compliance_claim": false,
+    "review_owner": "Lender legal/compliance officer (unassigned)",
+    "interpretation_status": "REQUIRES_REGULATED_LENDER_VALIDATION"
+  }
 ]

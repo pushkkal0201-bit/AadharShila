@@ -1,4 +1,5 @@
 """Materialize provenance snapshots and persist explainable assessments."""
+import os
 from datetime import datetime,timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -38,7 +39,8 @@ def collect_snapshot(db,app):
     for d in documents:
         reuse=db.scalars(select(Document).join(Application,Document.application_id==Application.id).where(Document.sha256==d.sha256,Document.application_id!=app.id,Application.org_id==app.org_id)).all()
         if reuse: shared.append({'hash_prefix':d.sha256[:12],'document_id':d.id,'other_application_count':len({x.application_id for x in reuse})})
-    return {'application':record,'evidence':evidence,'consents':purposes,'shared_document_hashes':shared}
+    return {'application':record,'evidence':evidence,'consents':purposes,'shared_document_hashes':shared,
+            'operating_mode':os.getenv('APP_ENV','development').upper()}
 
 def build_assessment(db:Session,app:Application,actor=None,policy=None):
     policy=policy or active_policy(db,app.product)

@@ -27,3 +27,12 @@
 - `SIMULATED` evidence is not real source verification even when a fixture’s internal verification field reads `VERIFIED`.
 - No real-world performance, PD accuracy, fairness, cost reduction, adoption or legal certification is asserted.
 - The local functional acceptance tests do not replace a production security audit.
+
+## 10 November 2026 hardening checkpoint
+
+- **Locally verified:** fail-closed `production` output, borrower screening redaction across additional assessment routes, signed partner-gateway contract with tamper/redirect/SSRF tests, SQLite backup/restore with document hash protection, and synthetic temporal-holdout credit-model training pipeline.
+- **Exercised locally:** 55 Python tests pass; SQLite recovery restored 16 synthetic applications into a fresh location. The automated recovery test also restored one uploaded text document.
+- **CI staged (not evidence of successful execution until workflow completes):** Linux/Windows Python tests, PostgreSQL Compose startup and disposable PostgreSQL backup/restore exercise.
+- **Cannot be claimed complete:** genuine bureau/CKYCR/AA/DigiLocker/registry source integrations, real-mortgage model validation, enterprise IAM, independent cybersecurity assessment, lender credit-policy approval, legal/regulatory sign-off, production hosting, business continuity and disaster recovery with stated RPO/RTO.
+
+See `docs/PROVIDER_ONBOARDING.md`, `docs/RISK_TRAINING.md`, `docs/SECURITY_REVIEW.md`, and `docs/RECOVERY_DRILL.md`.

@@ -20,14 +20,14 @@ Aadharshila separates **claimed information**, **evidence**, **verification stat
 | Identity and role access | Password-hashed local demo users, signed HttpOnly sessions, mutation CSRF checks, organization and borrower data boundaries |
 | Consent | Purpose-specific financial-underwriting consent; borrower-controlled grant/revocation; future collection gated in the evidence interface |
 | Evidence | Separate provider, integration mode, verification, freshness, capture time and revision; simulated provider data is explicitly labeled |
-| Document ingestion | Validated PDF/TXT upload, SHA-256, bounded text parsing, role-scoped download with integrity recheck; no inferred issuer authenticity |
+| Document ingestion | Validated PDF/TXT upload, SHA-256, bounded text parsing and structured field extraction; no inferred issuer authenticity |
 | Financial assessment | Decimal EMI, FOIR, LTV, monthly surplus, principal eligibility, total interest and repayment calculations |
 | Policy management | Separate Home Loan/LAP thresholds, draft/validate/approve/activate lifecycle and role separation |
 | Credit decision | Deterministic precedence: confirmed hard policy failure → REJECT; unresolved prerequisites/conflicts → REFER; all gates passed → APPROVE |
 | Contradictions | Income mismatch, property valuation mismatch and identical document hashes reused in unrelated cases |
 | Review requests | Missing evidence and conflicts become attributable tasks; closure cannot bypass mandatory rules |
 | Scenario studio | Alternative principal/EMI and income, interest-rate and collateral stress calculations |
-| History and replay | Previous decisions retained, decision-change comparison, deterministic no-provider replay |
+| History and replay | Stored immutable-in-application snapshots, previous decisions retained, deterministic no-provider replay |
 | Operations | Audit records, basic current-decision counts, documented API, durable database reassessment jobs |
 | Demo | 16 deterministic synthetic applications covering approval, referral, policy failure, outage, expiry, correction and attack cases |
 
@@ -70,22 +70,12 @@ policies/          Versioned illustrative credit packs
 migrations/        Alembic database migration
 scripts/           Benchmark utilities
 tests/             Unit and integration tests
-scripts/windows/   PowerShell launch, setup, worker and test scripts
-*.bat              Windows one-click wrappers
+scripts/windows/  Windows setup, run, worker and test commands
 ```
 
-## Windows — including D: drive
+## Windows (including D: drive)
 
-The Windows scripts detect the repository folder automatically; they do not assume the project is installed on `C:`. For example, copy this repository to `D:\Projects\Aadharshila` and run:
-
-```bat
-setup.bat
-run.bat
-```
-
-Open http://127.0.0.1:8000. Run `worker.bat` in a second terminal if you want background reassessments, or `test.bat` to validate the installation. The virtual environment, SQLite database, and uploaded demo files are stored under the folder on **D:**. Scripts use quoted paths for folder names containing spaces. See [Windows D: drive instructions](docs/WINDOWS_D_DRIVE.md).
-
-**Windows execution is not verified in this authoring environment**; GitHub Actions is configured to run the Python tests on Windows and Linux.
+Extract or clone into `D:\Projects\Aadharshila` (or any other location). Double-click `setup.bat` once, followed by `run.bat`. Use `worker.bat` for background reassessments and `test.bat` to run verification. Scripts locate their own repository root, support spaces in the drive path, and keep the virtual environment and demo database on the selected drive. See [`docs/WINDOWS_D_DRIVE.md`](docs/WINDOWS_D_DRIVE.md).
 
 ## Run it locally
 
@@ -151,7 +141,7 @@ PYTHONPATH=src pytest -q
 node --check web/app.js
 ```
 
-The local implementation test suite was run successfully (42 automated checks in the latest run) (see `docs/TEST_REPORT.md`). A programmatic HTTP smoke check reached the root, readiness endpoint, login and case detail. Direct automated Chromium navigation was blocked by the execution environment. Static Chromium visual rendering with injected live API case data succeeded without page errors, but it is **not** a successful browser-to-API E2E journey. Docker Compose and Windows PowerShell were **not** run in this environment; Windows and Linux CI is configured but results should be checked after the first GitHub push.
+The local implementation test suite was run successfully (36 automated checks in the latest run) (see `docs/TEST_REPORT.md`). A programmatic HTTP smoke check reached the root, readiness endpoint, login and case detail. Direct automated Chromium navigation was blocked by the execution environment. Static Chromium visual rendering with injected live API case data succeeded without page errors, but it is **not** a successful browser-to-API E2E journey. Docker Compose was **not** run in this environment.
 
 ## Integration and regulatory boundaries
 
@@ -159,18 +149,9 @@ The connectors page lists identity, CKYCR, DigiLocker, Account Aggregator, burea
 
 Recent RBI sources are catalogued in `docs/REGULATORY_SOURCES.md` (including the RBI Housing Finance Companies Directions, 2025, updated October 2026). The code does **not** claim to have encoded or legally certified those directions. Some credit policy thresholds are illustrations only and remain separate from the cited regulatory sources.
 
-## Screenshots
-
-All screenshots show synthetic demonstration records, not production borrower data.
-
-| Overview | Application queue | Decision explanation |
-| --- | --- | --- |
-| ![Overview](docs/overview.webp) | ![Application queue](docs/queue.webp) | ![Decision explanation](docs/decision.webp) |
-
 ## Documentation
 
-- [`docs/WINDOWS_D_DRIVE.md`](docs/WINDOWS_D_DRIVE.md) — setup on the D: drive, scripts and troubleshooting
-
+- [`docs/WINDOWS_D_DRIVE.md`](docs/WINDOWS_D_DRIVE.md) — Windows and D: drive installation
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — data flow, state models and module boundaries
 - [`docs/DECISION_RULES.md`](docs/DECISION_RULES.md) — calculation and precedence specification
 - [`docs/REGULATORY_SOURCES.md`](docs/REGULATORY_SOURCES.md) — official source register, pending control review
@@ -186,3 +167,17 @@ All screenshots show synthetic demonstration records, not production borrower da
 ## Important limitations
 
 This is a substantial locally runnable integrated demonstrator, **not a production-ready loan origination system**. It requires lender-approved policies, licensed provider integrations, professional legal/title checks, production identity onboarding, security validation, retention controls, independent model assessment and deployment/recovery exercises before use with real borrowers. No real disbursements are implemented. No trained ML probability of default is asserted.
+
+## Production-hardening additions (10 November 2026)
+
+The code includes a **fail-closed production governance gate**: `APP_ENV=production` always routes local decisions to `REFER`. Simulated and sandbox evidence cannot satisfy production verification prerequisites, and a `LIVE` label alone never authorizes a lender decision. The product must not be presented as issuing real credit approval or rejection.
+
+A fixed HTTPS **partner gateway adapter** now supports signed response validation, consent enforcement, bounded timeouts, correlation IDs, and fail-closed error reporting for an institution's separately authorized integration. **No real lender, credit-bureau, government, AA or KYC provider connection has been enabled.** See [`docs/PROVIDER_ONBOARDING.md`](docs/PROVIDER_ONBOARDING.md). Internal security regression tests and residual risks are tracked in [`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md).
+
+The optional [`risk_training.py`](src/aadharshila/risk_training.py) module provides documented, reproducible offline logistic-regression development with temporal holdout evaluation, calibration reporting, dataset-provenance requirements and duplicate-borrower leakage checks. The research model is **never activated** by the underwriting service, and no real mortgage outcome dataset or independent validation is available. See [`docs/RISK_TRAINING.md`](docs/RISK_TRAINING.md).
+
+A **portable SQLite backup and restore tool** includes document bytes, SHA-256 verification and a no-overwrite recovery path. Run `python -m aadharshila.recovery --help` or follow [`docs/RECOVERY_DRILL.md`](docs/RECOVERY_DRILL.md). The first local drill restored all 16 synthetic cases, and a separate automated test validated recovery of a synthetic document. Docker Compose PostgreSQL restore scripts and a CI execution job are included, but production PITR and cloud disaster recovery are outside the local build.
+
+### What remains external
+
+Before a genuine financial institution could use this platform for actual borrowers, its authorized staff and suppliers must provide: provider contracts and API credentials; legally valid borrower-consent terms; permitted data access; independently approved and calibrated model data; lender-adopted credit policies; a qualified third-party security review; contractual and regulatory counsel sign-off; and secure hosted deployment with backup/failover exercises. None can be genuinely self-certified by a software project. The local engineering build deliberately keeps these dependencies visible rather than issuing fictional approvals.

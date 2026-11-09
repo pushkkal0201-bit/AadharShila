@@ -25,7 +25,9 @@ EXPLANATIONS={
  'INCOME_BELOW_MIN':'Verified income is below the demonstration policy minimum.',
  'INVALID_FINANCIALS':'Financial data cannot be assessed safely.',
  'TECHNICAL_FAILURE':'A required dependency failed; automatic approval is blocked.',
- 'DOCUMENT_REUSE_REVIEW':'An identical document was found in an unrelated application; authorized review is required.'}
+ 'DOCUMENT_REUSE_REVIEW':'An identical document was found in an unrelated application; authorized review is required.',
+ 'NONLIVE_EVIDENCE':'A production assessment requires authorized, live, independently verified evidence.',
+ 'PRODUCTION_AUTHORIZATION_REQUIRED':'A lender-approved policy and authorized production decision scope are not configured.'}
 
 def evaluate(snapshot, policy):
     app=snapshot['application']; ev=snapshot.get('evidence',{}); consents=snapshot.get('consents',[])
@@ -34,12 +36,16 @@ def evaluate(snapshot, policy):
         rules.append({'code':code,'status':result,'category':category,'detail':detail or EXPLANATIONS.get(code,code)})
         if result!='PASS' and result!='NOT_APPLICABLE': reasons.append({'code':code,'status':result,'explanation':detail or EXPLANATIONS.get(code,code)})
     if app['product']!=policy['product']: raise ValueError('Policy product mismatch')
+    production=snapshot.get('operating_mode','DEVELOPMENT').upper()=='PRODUCTION'
     active_consent='financial_underwriting' in consents
     check('MISSING_CONSENT','PASS' if active_consent else 'UNRESOLVED','consent')
     numeric={}
     for key in MANDATORY:
         item=ev.get(key)
-        verified=(item is not None and item.get('verification')=='VERIFIED' and not item.get('expired',False))
+        verified=(item is not None and item.get('verification')=='VERIFIED' and not item.get('expired',False)
+                  and (not production or item.get('mode')=='LIVE'))
+        if production and item and item.get('mode')!='LIVE':
+            check('NONLIVE_EVIDENCE','UNRESOLVED','provenance',f'{key} requires an authorized live source')
         numeric[key]=item['value'].get('amount') if verified and isinstance(item.get('value'),dict) else None
         check(key.upper()+'_UNRESOLVED','PASS' if verified else 'UNRESOLVED','evidence')
         if item and item.get('verification')=='FAILED':
@@ -89,7 +95,13 @@ def evaluate(snapshot, policy):
         stresses=stress(app['amount'],policy['annual_rate_percent'],app['tenure_months'],accepted_income,obligations,property_value,policy) if accepted_income>0 and property_value>0 else []
     else: offer=None; stresses=[]
     # Confirmed terminal policy failures take precedence over unrelated missing evidence.
-    outcome='REJECT' if any(r['status']=='FAIL' for r in rules) else ('REFER' if any(r['status']=='UNRESOLVED' for r in rules) else 'APPROVE')
+    # No code path silently authorizes actual lender decisions. External policy approval,
+    # risk validation and legal sign-off are not delivered with this repository.
+    if production:
+        check('PRODUCTION_AUTHORIZATION_REQUIRED','UNRESOLVED','governance')
+    outcome=('REFER' if production else
+             ('REJECT' if any(r['status']=='FAIL' for r in rules) else
+              ('REFER' if any(r['status']=='UNRESOLVED' for r in rules) else 'APPROVE')))
     score=None
     if fin and fin['foir'] is not None and fin['ltv'] is not None:
         score={"type":"ILLUSTRATIVE_RULE_BASED_RISK_BANDS","band":('HIGH' if fin['foir']>0.48 or fin['ltv']>0.85 else ('MODERATE' if fin['foir']>0.35 or fin['ltv']>0.65 else 'LOW')),
