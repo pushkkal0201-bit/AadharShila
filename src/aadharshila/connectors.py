@@ -162,7 +162,13 @@ class PartnerGatewayConnector:
             if supplied_at.tzinfo is None or abs((datetime.now(timezone.utc) - supplied_at).total_seconds()) > 300:
                 raise ValueError('STALE_PROVIDER_ASSERTION')
             data = body.get('data')
-            if not isinstance(data, dict) or len(json.dumps(data)) > 20_000:
+            if not isinstance(data, dict):
+                raise ValueError('INVALID_RESPONSE_PAYLOAD')
+            try:
+                serialized = json.dumps(data, sort_keys=True, separators=(',', ':'), allow_nan=False)
+            except (TypeError, ValueError):
+                raise ValueError('INVALID_RESPONSE_PAYLOAD') from None
+            if len(serialized.encode('utf-8')) > 20_000:
                 raise ValueError('INVALID_RESPONSE_PAYLOAD')
             return ConnectorResult(cfg.mode, 'SUCCESS', body['verification'], cfg.provider,
                                    data, None, True, supplied_at.isoformat())
@@ -224,6 +230,9 @@ def fetch_and_record(db, app, key, actor):
         status=reply.status, request_id=request_id, error_category=reply.error_category,
         response_metadata={'verification': reply.verification, 'typed_error': reply.error_category,
                            'live': reply.mode == 'LIVE', 'signature_validated': reply.signature_validated,
+                           'payload_sha256': (hashlib.sha256(json.dumps(reply.value, sort_keys=True,
+                               separators=(',', ':'), allow_nan=False).encode('utf-8')).hexdigest()
+                               if reply.signature_validated and reply.status == 'SUCCESS' else None),
                            'verified_at': reply.verified_at},
         completed_at=datetime.now(timezone.utc))
     db.add(invocation)
