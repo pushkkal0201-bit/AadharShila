@@ -15,7 +15,7 @@ from .models import Application,User,Consent,Evidence,Policy,Assessment,Document
 from .security import current_user,require,verify_password,token_for
 from .service import active_policy,build_assessment,bump,collect_snapshot,replay,audit
 from .engine import evaluate
-from .connectors import fetch_and_record
+from .connectors import fetch_and_record, configured_adapter
 from .seed import seed
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -445,6 +445,27 @@ def activate_policy(id:str,db:Session=Depends(get_db),user:User=Depends(current_
     for prior in db.scalars(select(Policy).where(Policy.product==p.product,Policy.state=='ACTIVE')).all():prior.state='RETIRED'
     p.state='ACTIVE';db.commit();return {'state':p.state}
 
+@app.get('/api/v1/operations/readiness')
+def production_readiness(user:User=Depends(current_user)):
+    require(user,{'ANALYST','COMPLIANCE','AUDITOR','ADMIN','POLICY_APPROVER'})
+    keys=['identity','bank_income','income_support','bureau','ownership','legal','valuation','screening']
+    providers={}
+    for key in keys:
+        adapter,error=configured_adapter(key)
+        providers[key]={'configuration_mode':adapter.mode if adapter else 'UNAVAILABLE',
+                        'configuration_error':error, 'live_verified':False}
+    return {'application':'Aadharshila','environment':os.getenv('APP_ENV','development'),
+            'automatic_real_underwriting':'BLOCKED_BY_GOVERNANCE_GATE',
+            'production_authorizations':{
+                'lender_adopted_policy':'NOT_ATTESTED',
+                'independent_security_review':'NOT_ATTESTED',
+                'regulated_provider_access':'NOT_ATTESTED',
+                'real_credit_model_validation':'NOT_ATTESTED',
+                'legal_regulatory_signoff':'NOT_ATTESTED',
+                'production_disaster_recovery':'NOT_ATTESTED'},
+            'providers':providers,
+            'note':'This is a project readiness report, not a compliance certificate.'}
+
 @app.get('/api/v1/compliance/register')
 def compliance_register(user:User=Depends(current_user)):
     return {'items':json.loads((ROOT/'data'/'regulatory-register.json').read_text()),
@@ -453,7 +474,17 @@ def compliance_register(user:User=Depends(current_user)):
 @app.get('/api/v1/connectors')
 def connector_matrix(user:User=Depends(current_user)):
     names=[('Identity/KYC','identity'),('CKYCR',None),('DigiLocker',None),('Account Aggregator','bank_income'),('Credit bureau','bureau'),('GST/tax','income_support'),('Property registry','ownership'),('CERSAI',None),('RERA',None),('Valuation','valuation'),('Sanctions/PEP','screening')]
-    return {'items':[{'name':name,'evidence_key':key,'mode':'SIMULATED','verified_live':False,'note':'Deterministic local fixture only. Provider onboarding/authorization outstanding.'} for name,key in names]}
+    records=[]
+    for name,key in names:
+        adapter,error=configured_adapter(key) if key else (None,'PROVIDER_SPECIFIC_INTEGRATION_REQUIRED')
+        mode=adapter.mode if adapter else 'UNAVAILABLE'
+        records.append({'name':name,'evidence_key':key,'mode':mode,
+                        'verified_live':False,'configuration_error':error,
+                        'note':('Signed authorized partner gateway configured; no actual provider verification asserted.'
+                                if mode in ('SANDBOX','LIVE') else
+                                'Deterministic local fixture; not a real provider.' if mode=='SIMULATED' else
+                                'Provider onboarding/authorization not configured.')})
+    return {'items':records,'note':'Configured mode is not evidence of successful authorized provider onboarding.'}
 
 @app.post('/api/v1/applications/{id}/providers/{key}/run')
 def run_provider(id:str,key:str,db:Session=Depends(get_db),user:User=Depends(current_user)):

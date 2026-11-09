@@ -24,3 +24,9 @@ bash scripts/docker_restore_drill.sh /private/new-backup-dir
 ```
 
 The scripts capture a PostgreSQL custom-format dump and compressed document directory, verify checksums, then restore into a newly created disposable database and a temporary document directory without altering the running application database. A live database and document volume are not transactionally synchronized: quiesce writes before taking a cross-store-consistent backup. A real deployment additionally needs encrypted offsite retention, PostgreSQL WAL/PITR, storage replication, RPO/RTO exercises, key recovery, failover testing and security audit trails.
+
+## Hosted Compose verification
+
+GitHub Actions run [42703365325](https://github.com/pushkkal0201-bit/AadharShila/actions/runs/42703365325) completed the `docker-postgres-recovery` job successfully on a hosted Ubuntu runner. This exercised the real PostgreSQL + API + worker Compose startup, readiness, synthetic population, `pg_dump`, checksum verification and isolated PostgreSQL recovery. It is a development deployment drill, **not** a cloud-region failover or an audited RPO/RTO recovery exercise.
+
+The first Windows matrix run identified an SQLite snapshot handle that was not explicitly closed. The code now closes both source and snapshot connections before temporary-file cleanup. Windows CI is used to verify the fix rather than claiming it is validated merely by a Linux rerun.

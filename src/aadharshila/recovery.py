@@ -15,6 +15,7 @@ import sqlite3
 import tempfile
 import zipfile
 from datetime import datetime, timezone
+from contextlib import closing
 from pathlib import Path
 
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
@@ -34,7 +35,7 @@ def document_name(doc_id: str, media_type: str) -> str:
 
 
 def inspect_database(filename: Path):
-    with sqlite3.connect(str(filename)) as db:
+    with closing(sqlite3.connect(str(filename))) as db:
         result = db.execute('PRAGMA integrity_check').fetchone()
         if not result or result[0] != 'ok':
             raise ValueError('Database integrity check failed')
@@ -65,8 +66,9 @@ def backup_sqlite(database: Path, documents: Path, output: Path) -> dict:
         raise FileExistsError('Refusing to overwrite an existing backup')
     with tempfile.TemporaryDirectory(prefix='aadharshila-backup-') as temp:
         snapshot = Path(temp) / 'snapshot.sqlite'
-        with sqlite3.connect(str(database)) as source, sqlite3.connect(str(snapshot)) as target:
+        with closing(sqlite3.connect(str(database))) as source, closing(sqlite3.connect(str(snapshot))) as target:
             source.backup(target)
+            target.commit()
         rows, applications = inspect_database(snapshot)
         db_bytes = snapshot.read_bytes()
         manifest = {'format': 'aadharshila-sqlite-backup-v1',

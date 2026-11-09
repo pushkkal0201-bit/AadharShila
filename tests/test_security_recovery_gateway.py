@@ -133,3 +133,45 @@ def test_sqlite_backup_restore_with_documents_and_tamper_detection(tmp_path):
     original.write_bytes(b'tampered')
     with pytest.raises(ValueError):
         backup_sqlite(source_db,source_docs,tmp_path/'bad.zip')
+
+
+def test_partner_gateway_application_call_records_signed_response(cases,client,login,monkeypatch):
+    from aadharshila.connectors import PartnerGatewayConnector
+    from aadharshila.models import Evidence, ProviderInvocation
+    from aadharshila import connectors
+    secret=partner_config().hmac_key
+    case=cases['AS-1001']['id']
+    def respond(request):
+        payload=json.loads(request.content)
+        body=json.dumps({'request_id':payload['request_id'],'verification':'VERIFIED',
+                         'verified_at':datetime.now(timezone.utc).isoformat(),
+                         'data':{'amount':125000}}).encode()
+        return httpx.Response(200,content=body,headers={
+            'X-Aadharshila-Signature':hmac.new(secret.encode(),body,hashlib.sha256).hexdigest()})
+    monkeypatch.setattr(connectors,'configured_adapter',lambda key:
+                        (PartnerGatewayConnector(partner_config(),httpx.MockTransport(respond)),None))
+    borrower_auth=login('borrower')
+    consent=client.post(f'/api/v1/applications/{case}/consents',json={
+        'purpose':'financial_underwriting','granted':True},headers=borrower_auth)
+    assert consent.status_code==200,consent.text
+    auth=login('analyst')
+    response=client.post(f'/api/v1/applications/{case}/providers/bank_income/run',headers=auth)
+    assert response.status_code==200,response.text
+    data=response.json()
+    assert data['mode']=='SANDBOX' and data['status']=='SUCCESS'
+    with SessionLocal() as db:
+        invocation=db.scalar(select(ProviderInvocation).where(ProviderInvocation.request_id==data['request_id']))
+        assert invocation.mode=='SANDBOX' and invocation.error_category is None
+        recorded=db.scalar(select(Evidence).where(Evidence.application_id==case,Evidence.provider==partner_config().provider)
+            .order_by(Evidence.revision.desc()))
+        assert recorded.value['amount']==125000 and recorded.mode=='SANDBOX'
+
+
+def test_operational_readiness_is_not_a_fake_certification(cases,client,login):
+    login('analyst')
+    response=client.get('/api/v1/operations/readiness')
+    assert response.status_code==200
+    assert response.json()['automatic_real_underwriting']=='BLOCKED_BY_GOVERNANCE_GATE'
+    assert response.json()['production_authorizations']['independent_security_review']=='NOT_ATTESTED'
+    login('borrower')
+    assert client.get('/api/v1/operations/readiness').status_code==403

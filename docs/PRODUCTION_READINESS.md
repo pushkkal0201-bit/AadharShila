@@ -36,3 +36,7 @@
 - **Cannot be claimed complete:** genuine bureau/CKYCR/AA/DigiLocker/registry source integrations, real-mortgage model validation, enterprise IAM, independent cybersecurity assessment, lender credit-policy approval, legal/regulatory sign-off, production hosting, business continuity and disaster recovery with stated RPO/RTO.
 
 See `docs/PROVIDER_ONBOARDING.md`, `docs/RISK_TRAINING.md`, `docs/SECURITY_REVIEW.md`, and `docs/RECOVERY_DRILL.md`.
+
+## Hosted CI exercise note
+
+The PostgreSQL Compose backup/restore job and Ubuntu test job completed successfully in [Actions run 42703365325](https://github.com/pushkkal0201-bit/AadharShila/actions/runs/42703365325). The initial Windows job detected a snapshot file-lock error; the relevant SQLite handles have been explicitly closed in a follow-up patch. The updated Windows result must be read from the next workflow execution before it can be declared passed. No cloud-region disaster recovery, encryption/key restore or approved regulatory control operation was exercised.

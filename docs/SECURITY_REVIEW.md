@@ -24,3 +24,7 @@ Reviewed locally on 10 November 2026. This document describes **developer tests*
 5. Internal tests are necessary but do not substitute for a qualified external penetration test and formal remediation sign-off.
 
 **Scope of current tests:** `tests/test_security_recovery_gateway.py`, `tests/test_api.py`, `tests/test_next_stage.py`. Run `python -m pytest -q`.
+
+## Operations readiness endpoint
+
+Authorized staff can inspect `GET /api/v1/operations/readiness`. It reports per-provider configuration mode and explicitly marks lender approval, real-model validation, independent security assessment, regulated-provider agreements, legal sign-off and production disaster recovery as **NOT_ATTESTED**. The endpoint does not replace an external assessor's report.
