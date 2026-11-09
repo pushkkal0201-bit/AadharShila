@@ -34,6 +34,8 @@ class ConnectorResult:
     provider: str
     value: dict
     error_category: str | None = None
+    signature_validated: bool = False
+    verified_at: str | None = None
 
 
 class Connector(Protocol):
@@ -163,7 +165,7 @@ class PartnerGatewayConnector:
             if not isinstance(data, dict) or len(json.dumps(data)) > 20_000:
                 raise ValueError('INVALID_RESPONSE_PAYLOAD')
             return ConnectorResult(cfg.mode, 'SUCCESS', body['verification'], cfg.provider,
-                                   data, None)
+                                   data, None, True, supplied_at.isoformat())
         except (httpx.HTTPError, ValueError, TypeError, OverflowError, json.JSONDecodeError) as error:
             if isinstance(error, httpx.TimeoutException):
                 category = 'PROVIDER_TIMEOUT'
@@ -221,13 +223,18 @@ def fetch_and_record(db, app, key, actor):
         provider_name=reply.provider, mode=reply.mode,
         status=reply.status, request_id=request_id, error_category=reply.error_category,
         response_metadata={'verification': reply.verification, 'typed_error': reply.error_category,
-                           'live': reply.mode == 'LIVE'},
+                           'live': reply.mode == 'LIVE', 'signature_validated': reply.signature_validated,
+                           'verified_at': reply.verified_at},
         completed_at=datetime.now(timezone.utc))
     db.add(invocation)
+    db.flush()
     bump(db, app, actor, 'Provider refresh: ' + key)
     row = Evidence(application_id=app.id, key=key, value=reply.value,
         provider=reply.provider, mode=reply.mode,
-        verification=reply.verification, revision=app.revision)
+        verification=reply.verification, revision=app.revision,
+        provider_invocation_id=invocation.id,
+        expires_at=(datetime.now(timezone.utc) + __import__('datetime').timedelta(hours=24))
+        if reply.mode in ('LIVE', 'SANDBOX') else None)
     db.add(row)
     db.flush()
     assessment = build_assessment(db, app, actor) if app.workflow != 'DRAFT' else None

@@ -4,6 +4,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./aadharshila.db")
+if os.getenv('APP_ENV', 'development').lower() == 'production' and DATABASE_URL.startswith('sqlite'):
+    raise RuntimeError('Production requires externally managed PostgreSQL, not SQLite')
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
 

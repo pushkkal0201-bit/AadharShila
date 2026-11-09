@@ -181,3 +181,9 @@ A **portable SQLite backup and restore tool** includes document bytes, SHA-256 v
 ### What remains external
 
 Before a genuine financial institution could use this platform for actual borrowers, its authorized staff and suppliers must provide: provider contracts and API credentials; legally valid borrower-consent terms; permitted data access; independently approved and calibrated model data; lender-adopted credit policies; a qualified third-party security review; contractual and regulatory counsel sign-off; and secure hosted deployment with backup/failover exercises. None can be genuinely self-certified by a software project. The local engineering build deliberately keeps these dependencies visible rather than issuing fictional approvals.
+
+## Institutional release verification (10 November 2026)
+
+`src/aadharshila/production_gate.py` checks independent Ed25519 attestations scoped to the exact active policy, lender organization and product. Production requires authenticated LIVE evidence linked to a successful provider invocation, not a standalone LIVE flag, and refuses SQLite. See [Institutional Go Live](docs/INSTITUTIONAL_GO_LIVE.md).
+
+These safeguards do **not** establish licensing, provider contracts, independent legal review, real-world model accuracy or authorization to issue mortgages.

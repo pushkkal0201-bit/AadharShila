@@ -32,6 +32,8 @@ def validate_manifest(manifest: dict):
         raise ValueError('Only explicitly allowed decision-time numeric features can be used')
     if 'default_12m' in manifest['features']:
         raise ValueError('Outcome must not be a feature')
+    if not manifest['synthetic'] and not manifest.get('observation_end_date'):
+        raise ValueError('Real-world datasets require an explicit observation_end_date for 12-month label maturity')
 
 
 def calibration_table(y, probabilities, bins=5):
@@ -69,6 +71,12 @@ def train(csv: Path, manifest_file: Path, output: Path) -> dict:
     decision_dates = pd.to_datetime(df[date_key], utc=True, errors='coerce')
     if decision_dates.isna().any():
         raise ValueError('Every decision date must be valid')
+    if not manifest['synthetic']:
+        observation_end = pd.to_datetime(manifest['observation_end_date'], utc=True, errors='coerce')
+        if pd.isna(observation_end):
+            raise ValueError('Invalid observation_end_date')
+        if (decision_dates + pd.DateOffset(months=12) > observation_end).any():
+            raise ValueError('Real-world default labels must have a complete 12-month observation window')
     if df['default_12m'].isna().any() or not set(df['default_12m'].unique()) <= {0,1}:
         raise ValueError('Expected mature binary default_12m labels, no null/unknown outcomes')
     values = df[manifest['features']].apply(pd.to_numeric, errors='coerce')
@@ -109,6 +117,8 @@ def train(csv: Path, manifest_file: Path, output: Path) -> dict:
         'capability':'SYNTHETIC_EVALUATION_ONLY' if manifest['synthetic'] else 'EXTERNAL_DATA_EVALUATION_PENDING_INDEPENDENT_REVIEW',
         'source':manifest['source'],'license':manifest['license'],
         'label_definition':manifest['label_definition'], 'horizon_months':12,
+        'label_maturity':('SYNTHETIC_SIMULATION' if manifest['synthetic'] else
+            '12_MONTH_WINDOW_CHECKED_AGAINST_DECLARED_OBSERVATION_END_DATE'),
         'data_sha256':hashlib.sha256(csv.read_bytes()).hexdigest(),
         'decision_date_ranges':{s:[str(decision_dates.iloc[ix].min()),str(decision_dates.iloc[ix].max())]
                                 for s,ix in sections.items()},

@@ -23,8 +23,11 @@ Example manifest for data provided by an **authorized lender** (example only, no
   "features": ["foir", "ltv", "income_volatility"],
   "synthetic": false,
   "decision_date_column": "decision_date",
-  "borrower_id_column": "borrower_id"
+  "borrower_id_column": "borrower_id",
+  "observation_end_date": "2026-12-31"
 }
 ```
 
 The CSV must include those fields plus binary `default_12m` outcome. Every outcome must have matured through the entire observation period; no data from after the original decision may be included as a feature. Actual lender labels and data rights have **not** been provided. The only executed holdout is synthetic and establishes pipeline functionality, not validated real-mortgage default accuracy. The artifact is **not loaded in the live assessment engine**. Additional independent validation, lawful subgroup assessment, drift monitoring, fair-lending analysis, calibration and lending-governance approval are required before deployment.
+
+Non-synthetic data requires a declared observation end and 12-month matured outcomes for every decision. Independent verification of source labels and data rights remains mandatory.

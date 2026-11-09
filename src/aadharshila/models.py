@@ -78,6 +78,7 @@ class Evidence(Base):
     expires_at: Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True)
     revision: Mapped[int]=mapped_column(Integer,default=1)
     source_document_id: Mapped[str|None]=mapped_column(String(36),nullable=True)
+    provider_invocation_id: Mapped[str|None]=mapped_column(ForeignKey('provider_invocations.id'),nullable=True,index=True)
 
 class Document(Base):
     __tablename__='documents'

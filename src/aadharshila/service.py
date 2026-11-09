@@ -3,8 +3,9 @@ import os
 from datetime import datetime,timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from .models import Application, Evidence, Consent, Assessment, Conflict, ReviewTask, AuditEvent, Policy, Job, Document
+from .models import Application, Evidence, Consent, Assessment, Conflict, ReviewTask, AuditEvent, Policy, Job, Document, ProviderInvocation
 from .engine import evaluate
+from .production_gate import evaluate_configured
 
 def stamp(d): return d.isoformat() if d else None
 
@@ -23,7 +24,13 @@ def collect_snapshot(db,app):
     for r in rows:
         expires=r.expires_at
         if expires and expires.tzinfo is None: expires=expires.replace(tzinfo=timezone.utc)
-        evidence[r.key]={'id':r.id,'key':r.key,'value':r.value,'verification':r.verification,'mode':r.mode,'provider':r.provider,
+        invocation=db.get(ProviderInvocation,r.provider_invocation_id) if r.provider_invocation_id else None
+        authenticated_live=bool(r.mode=='LIVE' and invocation and
+            invocation.application_id==app.id and invocation.evidence_key==r.key and
+            invocation.provider_name==r.provider and invocation.mode=='LIVE' and
+            invocation.status=='SUCCESS' and invocation.response_metadata.get('signature_validated') is True and
+            invocation.response_metadata.get('verification')=='VERIFIED')
+        evidence[r.key]={'live_authenticated':authenticated_live,'provider_invocation_id':r.provider_invocation_id,'id':r.id,'key':r.key,'value':r.value,'verification':r.verification,'mode':r.mode,'provider':r.provider,
                         'captured_at':stamp(r.captured_at),'expired':bool(expires and expires<=current),'expires_at':stamp(r.expires_at),'revision':r.revision}
     purposes=[]
     for c in db.scalars(select(Consent).where(Consent.application_id==app.id)).all():
@@ -48,6 +55,8 @@ def build_assessment(db:Session,app:Application,actor=None,policy=None):
     if existing:return existing
     snapshot=collect_snapshot(db,app)
     config={**policy.config,'version':policy.version}
+    snapshot['production_authorization']=evaluate_configured(organization_id=app.org_id,
+        product=app.product,policy=config)
     result=evaluate(snapshot,config)
     snap={'input':snapshot,'policy':config,'model_version':'rule-band-1'}
     assessment=Assessment(application_id=app.id,revision=app.revision,policy_id=policy.id,outcome=result['outcome'],result=result,snapshot=snap)

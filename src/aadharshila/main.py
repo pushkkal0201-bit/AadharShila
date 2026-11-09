@@ -16,6 +16,7 @@ from .security import current_user,require,verify_password,token_for
 from .service import active_policy,build_assessment,bump,collect_snapshot,replay,audit
 from .engine import evaluate
 from .connectors import fetch_and_record, configured_adapter
+from .production_gate import evaluate_configured
 from .seed import seed
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -446,25 +447,30 @@ def activate_policy(id:str,db:Session=Depends(get_db),user:User=Depends(current_
     p.state='ACTIVE';db.commit();return {'state':p.state}
 
 @app.get('/api/v1/operations/readiness')
-def production_readiness(user:User=Depends(current_user)):
+def production_readiness(db:Session=Depends(get_db),user:User=Depends(current_user)):
     require(user,{'ANALYST','COMPLIANCE','AUDITOR','ADMIN','POLICY_APPROVER'})
     keys=['identity','bank_income','income_support','bureau','ownership','legal','valuation','screening']
     providers={}
     for key in keys:
         adapter,error=configured_adapter(key)
         providers[key]={'configuration_mode':adapter.mode if adapter else 'UNAVAILABLE',
-                        'configuration_error':error, 'live_verified':False}
+                        'configuration_error':error,'live_verified':False}
+    policies={}
+    for product in ('HOME_LOAN','LAP'):
+        try:
+            policy=active_policy(db,product)
+            config={**policy.config,'version':policy.version}
+            gate=evaluate_configured(organization_id=user.org_id,product=product,policy=config)
+            policies[product]={'active_policy_version':policy.version,'signed_attestations':gate}
+        except ValueError:
+            policies[product]={'active_policy_version':None,'error':'ACTIVE_POLICY_MISSING'}
+    all_signed=all(p.get('signed_attestations',{}).get('valid',False) for p in policies.values())
     return {'application':'Aadharshila','environment':os.getenv('APP_ENV','development'),
-            'automatic_real_underwriting':'BLOCKED_BY_GOVERNANCE_GATE',
-            'production_authorizations':{
-                'lender_adopted_policy':'NOT_ATTESTED',
-                'independent_security_review':'NOT_ATTESTED',
-                'regulated_provider_access':'NOT_ATTESTED',
-                'real_credit_model_validation':'NOT_ATTESTED',
-                'legal_regulatory_signoff':'NOT_ATTESTED',
-                'production_disaster_recovery':'NOT_ATTESTED'},
-            'providers':providers,
-            'note':'This is a project readiness report, not a compliance certificate.'}
+            'automatic_real_underwriting':('SIGNED_GOVERNANCE_PREREQUISITES_PRESENT'
+                if all_signed and os.getenv('APP_ENV')=='production' else 'BLOCKED_BY_GOVERNANCE_GATE'),
+            'production_authorizations':policies.get('HOME_LOAN',{}).get('signed_attestations',{}).get('requirements',{}),
+            'per_product':policies,'providers':providers,
+            'note':'Verified signatures are not independent verification of legal authority or licensing.'}
 
 @app.get('/api/v1/compliance/register')
 def compliance_register(user:User=Depends(current_user)):

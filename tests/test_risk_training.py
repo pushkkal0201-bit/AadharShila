@@ -40,3 +40,24 @@ def test_synthetic_temporal_holdout_runs_reproducibly(tmp_path):
     rows.to_csv(csv,index=False)
     with pytest.raises(ValueError,match='Duplicate'):
         train(csv,m,tmp_path/'forbidden.json')
+
+
+def test_real_data_maturity_must_be_declared_and_complete(tmp_path):
+    base={'source':'authorized-lender-dataset','license':'contractual',
+          'permission':'lender-permitted-development','label_definition':'default by 12 months',
+          'horizon_months':12,'features':['foir'],'synthetic':False,
+          'decision_date_column':'decision_date','borrower_id_column':'borrower_id'}
+    with pytest.raises(ValueError,match='observation_end_date'):
+        validate_manifest(base)
+    pd=pytest.importorskip('pandas')
+    dates=pd.date_range('2024-01-01',periods=400,freq='D')
+    rows=pd.DataFrame({'decision_date':dates.astype(str),
+                       'borrower_id':[f'example-{i}' for i in range(400)],
+                       'foir':[0.4 if i%2 else 0.3 for i in range(400)],
+                       'default_12m':[i%2 for i in range(400)]})
+    csv=tmp_path/'input.csv';rows.to_csv(csv,index=False)
+    base['observation_end_date']='2025-01-31'
+    meta=tmp_path/'manifest.json';meta.write_text(json.dumps(base))
+    with pytest.raises(ValueError,match='observation window'):
+        train(csv,meta,tmp_path/'not-mature.json')
+    assert not (tmp_path/'not-mature.json').exists()

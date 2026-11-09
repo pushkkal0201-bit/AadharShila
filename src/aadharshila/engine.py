@@ -43,8 +43,8 @@ def evaluate(snapshot, policy):
     for key in MANDATORY:
         item=ev.get(key)
         verified=(item is not None and item.get('verification')=='VERIFIED' and not item.get('expired',False)
-                  and (not production or item.get('mode')=='LIVE'))
-        if production and item and item.get('mode')!='LIVE':
+                  and (not production or (item.get('mode')=='LIVE' and item.get('live_authenticated') is True)))
+        if production and item and (item.get('mode')!='LIVE' or item.get('live_authenticated') is not True):
             check('NONLIVE_EVIDENCE','UNRESOLVED','provenance',f'{key} requires an authorized live source')
         numeric[key]=item['value'].get('amount') if verified and isinstance(item.get('value'),dict) else None
         check(key.upper()+'_UNRESOLVED','PASS' if verified else 'UNRESOLVED','evidence')
@@ -97,9 +97,10 @@ def evaluate(snapshot, policy):
     # Confirmed terminal policy failures take precedence over unrelated missing evidence.
     # No code path silently authorizes actual lender decisions. External policy approval,
     # risk validation and legal sign-off are not delivered with this repository.
-    if production:
+    signed_authorization=(snapshot.get('production_authorization') or {}).get('valid') is True
+    if production and not signed_authorization:
         check('PRODUCTION_AUTHORIZATION_REQUIRED','UNRESOLVED','governance')
-    outcome=('REFER' if production else
+    outcome=('REFER' if production and not signed_authorization else
              ('REJECT' if any(r['status']=='FAIL' for r in rules) else
               ('REFER' if any(r['status']=='UNRESOLVED' for r in rules) else 'APPROVE')))
     score=None
@@ -109,4 +110,5 @@ def evaluate(snapshot, policy):
     return {'outcome':outcome,'reasons':reasons,'rules':rules,'conflicts':conflicts,'financials':fin,
             'alternative':offer,'stress':stresses,'risk':score,'policy_version':policy['version'],
             'engine_version':ENGINE_VERSION,'evidence_revision':app['revision'],
-            'capability_mode':'SIMULATED/LOCAL','note':'Demonstration decision. Not a credit offer or regulated underwriting approval.'}
+            'capability_mode':'CONTROLLED_LIVE_CANDIDATE' if production and signed_authorization else 'SIMULATED/LOCAL',
+            'note':'Policy assessment only; no executed sanction or disbursement. Independent legal and lender approval is required.'}

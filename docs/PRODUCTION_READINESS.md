@@ -40,3 +40,10 @@ See `docs/PROVIDER_ONBOARDING.md`, `docs/RISK_TRAINING.md`, `docs/SECURITY_REVIE
 ## Hosted CI exercise note
 
 The PostgreSQL Compose backup/restore job and Ubuntu test job completed successfully in [Actions run 42703365325](https://github.com/pushkkal0201-bit/AadharShila/actions/runs/42703365325). The initial Windows job detected a snapshot file-lock error; the relevant SQLite handles have been explicitly closed in a follow-up patch. The updated Windows result must be read from the next workflow execution before it can be declared passed. No cloud-region disaster recovery, encryption/key restore or approved regulatory control operation was exercised.
+
+## Institutional release controls (10 November 2026)
+
+- Six distinct Ed25519 signers are checked for signature, period, exact policy SHA-256 and organization/product scope. None is supplied with the code.
+- Live evidence requires an authenticated matching provider invocation. Labels alone fail closed.
+- Production SQLite is rejected. Real-data model evaluation requires declared twelve-month label maturity.
+- See [Institutional Go Live](INSTITUTIONAL_GO_LIVE.md) for licensing, legal and provider dependencies.
