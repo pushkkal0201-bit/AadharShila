@@ -158,7 +158,7 @@ def login(body:Login,response:Response,db:Session=Depends(get_db)):
     response.set_cookie('aadharshila_csrf',csrf,secure=secure,samesite='lax',max_age=28800)
     return {'user':{'username':user.username,'role':user.role},'csrf':csrf}
 @app.post('/api/v1/auth/logout')
-def logout(response:Response):
+def logout(response:Response,user:User=Depends(current_user)):
     response.delete_cookie('aadharshila_session');response.delete_cookie('aadharshila_csrf')
     return {'ok':True}
 @app.get('/api/v1/auth/me')
@@ -392,8 +392,14 @@ def audit_history(id:str,db:Session=Depends(get_db),user:User=Depends(current_us
 
 @app.get('/api/v1/policies')
 def policies(db:Session=Depends(get_db),user:User=Depends(current_user)):
-    rows=db.scalars(select(Policy).order_by(Policy.product,Policy.version)).all()
+    require(user,{'ANALYST','COMPLIANCE','POLICY_AUTHOR','POLICY_APPROVER','AUDITOR','ADMIN'})
+    rows=db.scalars(select(Policy).where(Policy.org_id==user.org_id).order_by(Policy.product,Policy.version)).all()
     return {'items':[{'id':p.id,'product':p.product,'version':p.version,'state':p.state,'config':p.config,'author_id':p.author_id,'approver_id':p.approver_id} for p in rows]}
+
+def policy_for_user(db,id,user):
+    policy=db.scalar(select(Policy).where(Policy.id==id,Policy.org_id==user.org_id))
+    if policy is None:raise HTTPException(404,'Policy not found')
+    return policy
 
 def validate_policy_config(conf):
     required={'product','annual_rate_percent','max_foir','max_ltv','min_income','max_tenure_months','income_tolerance','property_tolerance','authority'}
@@ -409,19 +415,17 @@ def create_policy(body:PolicyCreate,db:Session=Depends(get_db),user:User=Depends
     cfg=body.config
     if cfg.get('product')!=body.product:raise HTTPException(422,'Product mismatch')
     validate_policy_config(cfg)
-    n=db.scalar(select(func.max(Policy.version)).where(Policy.product==body.product)) or 0
-    p=Policy(name='Proposed illustrative policy',product=body.product,version=n+1,config={**cfg,'version':n+1},state='DRAFT',author_id=user.id)
+    n=db.scalar(select(func.max(Policy.version)).where(Policy.org_id==user.org_id,Policy.product==body.product)) or 0
+    p=Policy(org_id=user.org_id,name='Proposed illustrative policy',product=body.product,version=n+1,config={**cfg,'version':n+1},state='DRAFT',author_id=user.id)
     db.add(p);db.commit();return {'id':p.id,'version':p.version,'state':p.state}
 @app.post('/api/v1/policies/{id}/validate')
 def validate_policy(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
-    require(user,{'POLICY_AUTHOR','ADMIN'});p=db.get(Policy,id)
-    if not p:raise HTTPException(404,'Policy not found')
+    require(user,{'POLICY_AUTHOR','ADMIN'});p=policy_for_user(db,id,user)
     validate_policy_config(p.config);p.state='VALIDATED';db.commit();return {'state':p.state}
 @app.post('/api/v1/policies/{id}/simulate')
 def simulate_policy(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
     require(user,{'POLICY_AUTHOR','POLICY_APPROVER','ANALYST','ADMIN'})
-    p=db.get(Policy,id)
-    if not p:raise HTTPException(404,'Policy not found')
+    p=policy_for_user(db,id,user)
     validate_policy_config(p.config)
     apps=db.scalars(select(Application).where(Application.product==p.product,Application.org_id==user.org_id)).all()
     changes=[];old={'APPROVE':0,'REJECT':0,'REFER':0};new={'APPROVE':0,'REJECT':0,'REFER':0}
@@ -434,16 +438,15 @@ def simulate_policy(id:str,db:Session=Depends(get_db),user:User=Depends(current_
     return {'product':p.product,'version':p.version,'original_counts':old,'simulated_counts':new,'changes':changes,'evaluated':sum(old.values()),'note':'Synthetic portfolio, no original decisions modified.'}
 @app.post('/api/v1/policies/{id}/approve')
 def approve_policy(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
-    require(user,{'POLICY_APPROVER','ADMIN'});p=db.get(Policy,id)
-    if not p:raise HTTPException(404,'Policy not found')
+    require(user,{'POLICY_APPROVER','ADMIN'});p=policy_for_user(db,id,user)
     if p.state!='VALIDATED' or p.author_id==user.id:raise HTTPException(409,'Validation and separation of duties required')
     p.state='APPROVED';p.approver_id=user.id;db.commit();return {'state':p.state}
 @app.post('/api/v1/policies/{id}/activate')
 def activate_policy(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
-    require(user,{'POLICY_APPROVER','ADMIN'});p=db.get(Policy,id)
-    if not p:raise HTTPException(404,'Policy not found')
+    require(user,{'POLICY_APPROVER','ADMIN'});p=policy_for_user(db,id,user)
     if p.state!='APPROVED' or p.approver_id!=user.id:raise HTTPException(409,'Approved policy required')
-    for prior in db.scalars(select(Policy).where(Policy.product==p.product,Policy.state=='ACTIVE')).all():prior.state='RETIRED'
+    for prior in db.scalars(select(Policy).where(Policy.org_id==user.org_id,Policy.product==p.product,Policy.state=='ACTIVE')).all():prior.state='RETIRED'
+    db.flush()  # Retire the previous active policy before activating the new one.
     p.state='ACTIVE';db.commit();return {'state':p.state}
 
 @app.get('/api/v1/operations/readiness')
@@ -458,7 +461,7 @@ def production_readiness(db:Session=Depends(get_db),user:User=Depends(current_us
     policies={}
     for product in ('HOME_LOAN','LAP'):
         try:
-            policy=active_policy(db,product)
+            policy=active_policy(db,product,user.org_id)
             config={**policy.config,'version':policy.version}
             gate=evaluate_configured(organization_id=user.org_id,product=product,policy=config)
             policies[product]={'active_policy_version':policy.version,'signed_attestations':gate}

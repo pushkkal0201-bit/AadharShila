@@ -47,3 +47,9 @@ The PostgreSQL Compose backup/restore job and Ubuntu test job completed successf
 - Live evidence requires an authenticated matching provider invocation. Labels alone fail closed.
 - Production SQLite is rejected. Real-data model evaluation requires declared twelve-month label maturity.
 - See [Institutional Go Live](INSTITUTIONAL_GO_LIVE.md) for licensing, legal and provider dependencies.
+
+## Policy isolation hardening — 10 November 2026
+
+Policy ownership and version uniqueness are lender scoped. The API prevents cross-organization policy listing, simulation and activation, while the assessment constructor rejects a policy from another lender. A partial unique index enforces one ACTIVE policy per lender/product; the historical upgrade is fail-closed for ambiguous policy ownership.
+
+Signed partner responses must match their persisted evidence payload digest before being treated as live-authenticated. Logout requires session and CSRF validation. These are locally tested software controls, not a lender-approved credit policy or independent security audit. See [engineering gap assessment](GAP_ASSESSMENT_2026-11-10.md).

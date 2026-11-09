@@ -1,6 +1,6 @@
 """Relational domain model. Flexible snapshot payloads are additionally versioned JSON."""
 from datetime import datetime, timezone
-from sqlalchemy import String, ForeignKey, DateTime, Integer, Boolean, Text, Numeric, JSON, UniqueConstraint, Index
+from sqlalchemy import String, ForeignKey, DateTime, Integer, Boolean, Text, Numeric, JSON, UniqueConstraint, Index, text
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base
 import uuid
@@ -98,6 +98,7 @@ class Document(Base):
 class Policy(Base):
     __tablename__='policies'
     id: Mapped[str]=mapped_column(String(36),primary_key=True,default=uid)
+    org_id: Mapped[str]=mapped_column(ForeignKey('organizations.id'),index=True)
     name: Mapped[str]=mapped_column(String(100))
     product: Mapped[str]=mapped_column(String(20),index=True)
     version: Mapped[int]=mapped_column(Integer)
@@ -105,7 +106,11 @@ class Policy(Base):
     config: Mapped[dict]=mapped_column(JSON)
     author_id: Mapped[str|None]=mapped_column(ForeignKey('users.id'),nullable=True)
     approver_id: Mapped[str|None]=mapped_column(ForeignKey('users.id'),nullable=True)
-    __table_args__=(UniqueConstraint('product','version'),)
+    __table_args__=(
+        UniqueConstraint('org_id','product','version',name='uq_policies_org_product_version'),
+        Index('uq_policies_one_active_per_org_product','org_id','product',unique=True,
+              sqlite_where=text("state='ACTIVE'"),postgresql_where=text("state='ACTIVE'")),
+    )
 
 class Assessment(Base):
     __tablename__='assessments'

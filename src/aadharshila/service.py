@@ -1,5 +1,7 @@
 """Materialize provenance snapshots and persist explainable assessments."""
 import os
+import hashlib
+import json
 from datetime import datetime,timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,8 +14,8 @@ def stamp(d): return d.isoformat() if d else None
 def audit(db, app_id, actor, action, reason='', detail=None):
     db.add(AuditEvent(application_id=app_id,actor_id=getattr(actor,'id',None),role=getattr(actor,'role','system'),action=action,reason=reason,detail=detail or {}))
 
-def active_policy(db,product):
-    policy=db.scalar(select(Policy).where(Policy.product==product,Policy.state=='ACTIVE').order_by(Policy.version.desc()))
+def active_policy(db,product,org_id):
+    policy=db.scalar(select(Policy).where(Policy.org_id==org_id,Policy.product==product,Policy.state=='ACTIVE').order_by(Policy.version.desc()))
     if not policy: raise ValueError('Active policy missing')
     return policy
 
@@ -25,7 +27,11 @@ def collect_snapshot(db,app):
         expires=r.expires_at
         if expires and expires.tzinfo is None: expires=expires.replace(tzinfo=timezone.utc)
         invocation=db.get(ProviderInvocation,r.provider_invocation_id) if r.provider_invocation_id else None
+        # A provider signature only authenticates the exact accepted payload.
+        evidence_digest=hashlib.sha256(json.dumps(r.value, sort_keys=True,
+            separators=(',', ':'), allow_nan=False).encode('utf-8')).hexdigest()
         authenticated_live=bool(r.mode=='LIVE' and invocation and
+            invocation.response_metadata.get('payload_sha256')==evidence_digest and
             invocation.application_id==app.id and invocation.evidence_key==r.key and
             invocation.provider_name==r.provider and invocation.mode=='LIVE' and
             invocation.status=='SUCCESS' and invocation.response_metadata.get('signature_validated') is True and
@@ -50,7 +56,9 @@ def collect_snapshot(db,app):
             'operating_mode':os.getenv('APP_ENV','development').upper()}
 
 def build_assessment(db:Session,app:Application,actor=None,policy=None):
-    policy=policy or active_policy(db,app.product)
+    policy=policy or active_policy(db,app.product,app.org_id)
+    if policy.org_id!=app.org_id or policy.product!=app.product:
+        raise ValueError('Cross-organization or cross-product policy assessment blocked')
     existing=db.scalar(select(Assessment).where(Assessment.application_id==app.id, Assessment.revision==app.revision,Assessment.policy_id==policy.id).order_by(Assessment.created_at.desc()))
     if existing:return existing
     snapshot=collect_snapshot(db,app)
