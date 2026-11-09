@@ -158,7 +158,7 @@ def login(body:Login,response:Response,db:Session=Depends(get_db)):
     response.set_cookie('aadharshila_csrf',csrf,secure=secure,samesite='lax',max_age=28800)
     return {'user':{'username':user.username,'role':user.role},'csrf':csrf}
 @app.post('/api/v1/auth/logout')
-def logout(response:Response):
+def logout(response:Response,user:User=Depends(current_user)):
     response.delete_cookie('aadharshila_session');response.delete_cookie('aadharshila_csrf')
     return {'ok':True}
 @app.get('/api/v1/auth/me')
