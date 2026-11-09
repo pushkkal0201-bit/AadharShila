@@ -22,7 +22,7 @@ function toast(msg,error=false){const t=$('#toast');t.textContent=msg;t.style.ba
 function showLogin(){ $('#login').classList.remove('hidden');$('#shell').classList.add('hidden'); }
 function showApp(){ $('#login').classList.add('hidden');$('#shell').classList.remove('hidden');$('#account').textContent=state.user.username.replace('_',' ');$('#role').textContent=state.user.role.replace('_',' ');$('#avatar').textContent=state.user.username[0].toUpperCase();$('#today').textContent=new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',timeZone:'Asia/Kolkata'});}
 async function reload(){
- const [apps,policies,reviews]=await Promise.all([api('/applications'),api('/policies'),api('/review-tasks')]);
+ const [apps,policies,reviews]=await Promise.all([api('/applications'),state.user?.role==='BORROWER'?Promise.resolve({items:[]}):api('/policies'),api('/review-tasks')]);
  state.apps=apps.items;state.policies=policies.items;state.reviews=reviews.items;
  if(!state.selected||!state.apps.some(a=>a.id===state.selected))state.selected=state.apps[0]?.id||null;
  await loadSelected();
