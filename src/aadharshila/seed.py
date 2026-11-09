@@ -40,7 +40,7 @@ def seed(db):
     policies={}
     for product,file in [('HOME_LOAN','home_loan.json'),('LAP','lap.json')]:
         config=json.loads((BASE/'policies'/file).read_text())
-        p=Policy(name=f'{product} illustrative rules',product=product,version=1,state='ACTIVE',config=config,author_id=users['policy_author'].id,approver_id=users['policy_approver'].id)
+        p=Policy(org_id=org.id,name=f'{product} illustrative rules',product=product,version=1,state='ACTIVE',config=config,author_id=users['policy_author'].id,approver_id=users['policy_approver'].id)
         db.add(p);policies[product]=p
     db.flush()
     scenarios={}
