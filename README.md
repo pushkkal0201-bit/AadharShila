@@ -70,8 +70,22 @@ policies/          Versioned illustrative credit packs
 migrations/        Alembic database migration
 scripts/           Benchmark utilities
 tests/             Unit and integration tests
-infra/             Operational resources
+scripts/windows/   PowerShell launch, setup, worker and test scripts
+*.bat              Windows one-click wrappers
 ```
+
+## Windows — including D: drive
+
+The Windows scripts detect the repository folder automatically; they do not assume the project is installed on `C:`. For example, copy this repository to `D:\Projects\Aadharshila` and run:
+
+```bat
+setup.bat
+run.bat
+```
+
+Open http://127.0.0.1:8000. Run `worker.bat` in a second terminal if you want background reassessments, or `test.bat` to validate the installation. The virtual environment, SQLite database, and uploaded demo files are stored under the folder on **D:**. Scripts use quoted paths for folder names containing spaces. See [Windows D: drive instructions](docs/WINDOWS_D_DRIVE.md).
+
+**Windows execution is not verified in this authoring environment**; GitHub Actions is configured to run the Python tests on Windows and Linux.
 
 ## Run it locally
 
@@ -145,7 +159,17 @@ The connectors page lists identity, CKYCR, DigiLocker, Account Aggregator, burea
 
 Recent RBI sources are catalogued in `docs/REGULATORY_SOURCES.md` (including the RBI Housing Finance Companies Directions, 2025, updated October 2026). The code does **not** claim to have encoded or legally certified those directions. Some credit policy thresholds are illustrations only and remain separate from the cited regulatory sources.
 
+## Screenshots
+
+All screenshots show synthetic demonstration records, not production borrower data.
+
+| Overview | Application queue | Decision explanation |
+| --- | --- | --- |
+| ![Overview](docs/overview.webp) | ![Application queue](docs/queue.webp) | ![Decision explanation](docs/decision.webp) |
+
 ## Documentation
+
+- [`docs/WINDOWS_D_DRIVE.md`](docs/WINDOWS_D_DRIVE.md) — setup on the D: drive, scripts and troubleshooting
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — data flow, state models and module boundaries
 - [`docs/DECISION_RULES.md`](docs/DECISION_RULES.md) — calculation and precedence specification
