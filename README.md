@@ -187,3 +187,11 @@ Before a genuine financial institution could use this platform for actual borrow
 `src/aadharshila/production_gate.py` checks independent Ed25519 attestations scoped to the exact active policy, lender organization and product. Production requires authenticated LIVE evidence linked to a successful provider invocation, not a standalone LIVE flag, and refuses SQLite. See [Institutional Go Live](docs/INSTITUTIONAL_GO_LIVE.md).
 
 These safeguards do **not** establish licensing, provider contracts, independent legal review, real-world model accuracy or authorization to issue mortgages.
+
+## Lender isolation and live evidence binding
+
+Policy packs now belong to a specific lender organization. The active Home Loan/LAP policy, policy versions, simulations and authorization flow are scoped to the lender. Only one policy per lender/product may be ACTIVE. The migration c91e8a2048f1 backfills historical policy ownership using author/approver accounts and stops if a safe mapping is impossible; back up the database and verify a staging migration first.
+
+Configured LIVE provider assertions are now bound to a digest of their exact recorded evidence payload. Modified or unlinked payloads do not satisfy the production evidence prerequisite. This is a consistency safeguard, not immutable storage, independent security certification or proof of licensed access.
+
+The detailed engineering review and external readiness boundaries are in [the 10 November gap assessment](docs/GAP_ASSESSMENT_2026-11-10.md).
