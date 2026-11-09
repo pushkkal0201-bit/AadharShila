@@ -1,5 +1,7 @@
 """Materialize provenance snapshots and persist explainable assessments."""
 import os
+import hashlib
+import json
 from datetime import datetime,timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -25,7 +27,11 @@ def collect_snapshot(db,app):
         expires=r.expires_at
         if expires and expires.tzinfo is None: expires=expires.replace(tzinfo=timezone.utc)
         invocation=db.get(ProviderInvocation,r.provider_invocation_id) if r.provider_invocation_id else None
+        # A provider signature only authenticates the exact accepted payload.
+        evidence_digest=hashlib.sha256(json.dumps(r.value, sort_keys=True,
+            separators=(',', ':'), allow_nan=False).encode('utf-8')).hexdigest()
         authenticated_live=bool(r.mode=='LIVE' and invocation and
+            invocation.response_metadata.get('payload_sha256')==evidence_digest and
             invocation.application_id==app.id and invocation.evidence_key==r.key and
             invocation.provider_name==r.provider and invocation.mode=='LIVE' and
             invocation.status=='SUCCESS' and invocation.response_metadata.get('signature_validated') is True and
