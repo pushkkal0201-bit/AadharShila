@@ -15,3 +15,8 @@ htmlcov/
 
 secrets/
 *.keyring.json
+
+.env.production
+.risk-ci/
+playwright-report/
+test-results/

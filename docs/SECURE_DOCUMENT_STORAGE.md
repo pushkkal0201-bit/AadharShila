@@ -37,3 +37,9 @@ Production PostgreSQL backups and encrypted object storage require their own val
 ## Verification
 
 Run `python -m pytest -q tests/test_encrypted_document_storage.py`, then the full suite, and `python -m alembic upgrade head` on disposable staging data. Tests cover AES-GCM binding and tampering, different ciphertext nonces, key rotation behavior, real API upload/download, tenant boundaries, production plaintext refusal, development SQLite ciphertext backup and restore, and a fresh migration.
+
+### Process-isolated extraction checkpoint
+
+PDF extraction has moved from the API process to a dedicated, resource-bounded Python subprocess (`document_isolation.py` / `isolated_document_worker.py`). The subprocess consumes untrusted PDF bytes on stdin, has bounded stdout and completion time, and receives a minimal environment without provider tokens. The caller marks extracted content **unverified** regardless of the parser result. On Windows, process-level resource limits require operating-system/container enforcement; POSIX CPU/address-space limits are applied in the child.
+
+This implementation is **not a comprehensive parser sandbox**. For actual lender data, add process/container account separation, seccomp/AppArmor, no-network egress and separately backed restricted storage, and obtain a qualified external security review. Production scanning and encryption remain mandatory and fail closed when unavailable.

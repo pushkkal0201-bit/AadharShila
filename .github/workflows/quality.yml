@@ -27,6 +27,23 @@ jobs:
           SEED_DEMO: 'true'
       - name: Check browser JavaScript syntax
         run: node --check web/app.js
+      - name: Reproducible synthetic research check
+        run: python -m aadharshila.synthetic_risk_benchmark --output-dir .risk-ci
+
+  browser-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install app and Chromium E2E dependencies
+        run: |
+          python -m pip install -r requirements-browser.txt
+          python -m pip install --no-deps -e .
+          python -m playwright install --with-deps chromium
+      - name: Real browser smoke against isolated local FastAPI
+        run: python scripts/browser_smoke.py
 
   docker-postgres-recovery:
     runs-on: ubuntu-latest
@@ -43,6 +60,20 @@ jobs:
           set -euo pipefail
           curl --fail --retry 20 --retry-delay 3 --retry-connrefused http://127.0.0.1:8000/health/ready
           test "$(docker compose exec -T db psql -U aadharshila -d aadharshila -At -c 'SELECT count(*) FROM applications')" -ge 16
+      - name: Create one synthetic document before recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'Synthetic recovery file - no personal data\n' > "$RUNNER_TEMP/recovery-demo.txt"
+          curl -fsS -c "$RUNNER_TEMP/cookies" -H 'Content-Type: application/json' \
+            -d '{"username":"analyst","password":"Demo@12345"}' \
+            http://127.0.0.1:8000/api/v1/auth/login > "$RUNNER_TEMP/login.json"
+          csrf=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["csrf"])' "$RUNNER_TEMP/login.json")
+          aid=$(docker compose exec -T db psql -U aadharshila -d aadharshila -At -c "SELECT id FROM applications ORDER BY reference LIMIT 1")
+          curl -fsS -b "$RUNNER_TEMP/cookies" -H "X-CSRF-Token: $csrf" \
+            -F "file=@$RUNNER_TEMP/recovery-demo.txt;type=text/plain" \
+            "http://127.0.0.1:8000/api/v1/applications/$aid/documents" > "$RUNNER_TEMP/upload.json"
+          python -c 'import json,sys; x=json.load(open(sys.argv[1])); assert x["verified"] is False' "$RUNNER_TEMP/upload.json"
       - name: Actual PostgreSQL and document-volume backup + restore drill
         run: |
           bash scripts/docker_backup.sh "$RUNNER_TEMP/aadharshila-ci-backup"

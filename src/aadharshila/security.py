@@ -5,7 +5,7 @@ import jwt
 from fastapi import Request, HTTPException, Depends
 from sqlalchemy.orm import Session
 from .db import get_db
-from .models import User
+from .models import User, FederatedSession
 from .federated_auth import validate_federated_token, FederatedAuthenticationError
 from sqlalchemy import select
 
@@ -34,23 +34,31 @@ def token_for(user):
 
 def current_user(request:Request,db:Session=Depends(get_db)):
     bearer=request.headers.get('authorization','')
-    token=bearer[7:] if bearer.lower().startswith('bearer ') else request.cookies.get('aadharshila_session')
+    is_bearer=bearer.lower().startswith('bearer ')
+    cookie=request.cookies.get('aadharshila_session')
+    token=bearer[7:] if is_bearer else cookie
     if not token:raise HTTPException(status_code=401,detail='Authentication required')
-    if os.getenv('APP_ENV','development')=='production':
-        # Local session cookies and HMAC demonstration tokens cannot be used
-        # to access borrower records in a live deployment.
-        if not bearer.lower().startswith('bearer '):
-            raise HTTPException(status_code=401,detail='Federated bearer authentication required')
-        try: claims=validate_federated_token(token)
+    if not is_bearer and token.startswith('fs_'):
+        # DB-backed, revocable session from an OIDC authorization-code login.
+        digest=hashlib.sha256(token.encode('utf-8')).hexdigest()
+        session=db.get(FederatedSession,digest)
+        expires=session.expires_at if session else None
+        if expires and expires.tzinfo is None:expires=expires.replace(tzinfo=timezone.utc)
+        if not session or session.revoked_at or expires<=datetime.now(timezone.utc):
+            raise HTTPException(401,'Invalid or revoked browser session')
+        user=db.get(User,session.user_id)
+    elif os.getenv('APP_ENV','development')=='production':
+        if not is_bearer:raise HTTPException(401,'Federated authentication required')
+        try:claims=validate_federated_token(token)
         except FederatedAuthenticationError:
-            raise HTTPException(status_code=401,detail='Invalid federated identity') from None
+            raise HTTPException(401,'Invalid federated identity') from None
         user=db.scalar(select(User).where(User.oidc_subject==claims['sub']))
     else:
-        try: data=jwt.decode(token,SECRET,algorithms=['HS256'])
-        except jwt.PyJWTError:raise HTTPException(status_code=401,detail='Invalid or expired session')
+        try:data=jwt.decode(token,SECRET,algorithms=['HS256'])
+        except jwt.PyJWTError:raise HTTPException(401,'Invalid or expired session')
         user=db.get(User,data.get('sub'))
     if not user or not user.active:raise HTTPException(status_code=401,detail='Invalid account')
-    if not bearer and request.method in ('POST','PATCH','PUT','DELETE'):
+    if not is_bearer and request.method in ('POST','PATCH','PUT','DELETE'):
         csrf=request.cookies.get('aadharshila_csrf')
         if not csrf or not hmac.compare_digest(csrf,request.headers.get('X-CSRF-Token','')):
             raise HTTPException(status_code=403,detail='CSRF token missing')

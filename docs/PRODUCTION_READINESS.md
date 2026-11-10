@@ -70,3 +70,14 @@ Further detail: [`ENGINEERING_STAGE_2026-11-10.md`](ENGINEERING_STAGE_2026-11-10
 - **Not implemented/approved:** encrypted model/assessment database fields, centralized KMS/HSM, secure S3-compatible object storage, approved legacy plaintext re-encryption migration, key lifecycle operations, lifecycle retention/hold policies, real disaster recovery, independent security assessment and real lender authorization.
 
 See [`SECURE_DOCUMENT_STORAGE.md`](SECURE_DOCUMENT_STORAGE.md) for exact protection boundaries and deployment requirements.
+
+## 10 November — engineering checkpoint extension
+
+- **Document confidentiality and parsing:** AES-256-GCM storage implemented in the preceding stage; PDF parsing now uses a separate bounded subprocess. This is **process isolation, not complete OS sandboxing**. Production ClamAV, network isolation, KMS, key recovery and issuer signatures remain outstanding.
+- **Browser authentication:** OIDC code + PKCE, signed MFA/nonce validation, pre-provisioned subject mapping, revocable browser sessions and same-lender administrator deactivation are implemented and tested with locally generated signing keys. No lender IdP has been connected and no external IAM audit has been performed.
+- **Finance/policy:** Income reconciliation detects own-account salary labels, duplicate paid receipts, reversals, statement-month gaps and volatility; policy approvals now require an immutable recorded matching-impact simulation and a separate approver. Real categories, lender policy interpretation and historic portfolio data are still needed.
+- **ML:** A seeded synthetic evaluation exercise produces a legitimate model-training test report and explicitly leaves the model unactivated. No real PD accuracy is claimed.
+- **Verification:** 109 local automated tests, fresh Alembic migration, JS syntax, and a bounded 60-request authenticated local HTTP load smoke passed. Browser smoke execution was blocked locally and needs hosted CI. Docker-restore checksum verification was extended but awaits hosted CI.
+- **Operations:** Private process-local metrics, response-security headers and a production-style Compose illustration exist. No external monitoring, production backups, independently measured DR, legal sign-off, or live sanctions/disbursements have been established.
+
+See `ENGINEERING_RELEASE_2026-11-10.md` and the associated GitHub Actions results for this specific code revision.
