@@ -1,104 +1,208 @@
 # Aadharshila
 
-Aadharshila evaluates mortgage applications against evidence, affordability constraints, and versioned credit policies.
+**Evidence-led mortgage underwriting for Home Loans and Loans Against Property.**
 
-The backend uses Python 3.11+, FastAPI, Pydantic v2, SQLAlchemy 2, and Alembic. PostgreSQL 16 backs the Docker development stack; SQLite supports single-machine development. A bundled HTML/CSS/JavaScript client calls the API directly, while a database-backed worker handles queued reassessments.
+Aadharshila is a working underwriting demonstrator that connects an applicant's financial position, document evidence, property checks and lender-specific policy into a traceable credit assessment. It explains *why* an application passes, fails or needs human review—and preserves the evidence and rules behind each result.
 
-## Architecture / Core Concepts
+Built with **FastAPI, SQLAlchemy, PostgreSQL, Python and a browser-based JavaScript workspace**. The repository includes 16 synthetic mortgage cases, a deterministic decision engine, audit and replay tools, role-based workflows, and automated integration checks.
 
-### Assessment pipeline
+[![Quality checks](https://github.com/pushkkal0201-bit/AadharShila/actions/workflows/quality.yml/badge.svg)](https://github.com/pushkkal0201-bit/AadharShila/actions/workflows/quality.yml)
+
+> **Demo scope:** All sample applicants, financial records and provider responses are synthetic. `APPROVE`, `REFER` and `REJECT` are illustrative underwriting outcomes—not real loan sanctions. No licensed credit bureau, KYC provider, lender or disbursement system is connected.
+
+## The problem
+
+A mortgage decision is more than an EMI calculation.
+
+An applicant may show sufficient income on a bank statement, but a tax record may tell a different story. A property valuation can appear reasonable while ownership checks remain incomplete. A credit report can be missing because the provider is unavailable. Those are different problems, and they should produce different actions.
+
+In a fragmented review process, the analyst has to move between documents, worksheets, provider portals and policy manuals. A number may change without a clear record of its source. Reassessment can become difficult to explain, especially after the supporting evidence or credit policy has changed.
+
+**Aadharshila keeps the chain intact:** evidence → calculations → policy checks → reason codes → review outcome → historical record.
+
+## How it works
+
+```mermaid
+flowchart TD
+    A[Home Loan / LAP application] --> B[Applicant details and consent]
+    B --> C[Evidence and document intake]
+    C --> D[Source status, freshness and contradiction checks]
+    D --> E[Income, EMI, FOIR and LTV calculations]
+    E --> F[Versioned lender/product policy]
+    F --> G{Decision engine}
+    G -->|All mandatory gates pass| H[APPROVE - simulated]
+    G -->|Known hard policy failure| I[REJECT]
+    G -->|Missing or conflicting evidence| J[REFER for review]
+    H --> K[Reasons, audit and frozen snapshot]
+    I --> K
+    J --> K
+    K --> L[Historical replay and decision comparison]
+    C --> M[Updated evidence revision]
+    M --> D
+```
+
+An assessment runs on a frozen snapshot of the application, evidence and active policy. Every rule records its result. Changing evidence creates a new revision and assessment; it does not erase the earlier decision.
+
+### Decision logic
+
+| Outcome | When the engine returns it | What it means |
+| --- | --- | --- |
+| **APPROVE** | All applicable evidence and policy gates pass | The *demonstration* checks are satisfied; no lender commitment is issued |
+| **REFER** | Required evidence is missing, stale, contradictory or blocked by a provider failure | An analyst must resolve the outstanding issue |
+| **REJECT** | A known hard policy limit is breached | The application fails the configured illustrative policy |
+
+A hard policy failure takes precedence over unrelated missing evidence. Missing information never counts as a pass. A provider response marked `SIMULATED` remains simulated even if its fixture verification status reads `VERIFIED`.
+
+### Financial calculations
+
+The engine uses decimal arithmetic for EMI, FOIR, LTV, repayment amounts and affordability limits.
+
+```text
+FOIR = (existing monthly obligations + proposed EMI) / accepted monthly income
+LTV  = requested loan principal / accepted property valuation
+```
+
+Income reconciliation excludes own-account transfers and loan proceeds, checks duplicates and reversals, and highlights statement coverage gaps or unusual volatility. Analyst-entered previews do not automatically become source-verified income. Policy thresholds are configured independently for Home Loans and LAP; the included rates and limits are demonstration assumptions.
+
+## See it in action
+
+![Aadharshila underwriting overview](docs/overview.webp)
+
+*Overview of a synthetic application, its affordability figures, evidence status and decision rationale.*
+
+### Five-minute judge walkthrough
+
+Start the application, select **Credit analyst**, and sign in with the local demo password `Demo@12345`.
+
+| Step | Open | What to demonstrate |
+| --- | --- | --- |
+| **1 — Inspect** | **Overview → AS-1004** | A self-employed LAP application requesting ₹20,00,000 against a ₹40,00,000 property valuation |
+| **2 — Explain** | **Evidence explorer → Decision explanation** | Bank and supporting income values disagree. The engine returns `REFER` with `INCOME_CONTRADICTION`, despite all nine *synthetic* evidence categories showing a verified fixture status |
+| **3 — Resolve** | **Evidence explorer** | Correct the supporting synthetic income value to `99000` through the permitted analyst flow. Reassessment produces a new evidence revision; any other unresolved issue still blocks approval |
+| **4 — Replay** | **Historical replay → Decision changes → Audit timeline** | Re-run the previous assessment against its *original* evidence and policy snapshot. Compare the old and new reason codes without changing history |
+| **5 — Compare** | **Application queue → Policy simulation** | Inspect clean, adverse and unavailable-provider cases; then show how a proposed policy change affects synthetic portfolio outcomes before approval |
+
+For the unmodified **AS-1004** case, the dashboard illustrates:
+
+| Measure | Synthetic example |
+| --- | ---: |
+| Requested principal | ₹20,00,000 |
+| Tenure | 180 months |
+| Proposed EMI | ₹22,108 |
+| Accepted monthly income | ₹1,00,000 |
+| Existing obligations | ₹14,000/month |
+| FOIR | 36.1% |
+| LTV | 50.0% |
+| Decision | **REFER** |
+| Reason | `INCOME_CONTRADICTION` |
+
+The figures alone suggest manageable affordability. The contradiction is why this case is referred. That distinction is central to the product.
+
+![Application queue](docs/queue.webp)
+
+![Decision explanation](docs/decision.webp)
+
+Other useful seeded cases: **AS-1001** (clean illustrative Home Loan), **AS-1003** (affordability failure), **AS-1006** (potential screening match requiring review) and **AS-1007** (provider failure, not a successful verification). A longer guided sequence is available in [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
+
+## What is implemented
+
+| Area | Current behavior |
+| --- | --- |
+| **Application intake** | Home Loan and LAP records, applicant roles, ownership, consent, participants and revision history |
+| **Evidence verification** | Source/mode labeling, freshness, expiry, conflicting income and valuation signals, provider failures, evidence requests and audit records |
+| **Financial assessment** | EMI, FOIR, LTV, monthly surplus, eligibility calculations, alternative terms and stress scenarios |
+| **Decision explanation** | Executed policy rules, reason codes, blockers, accepted inputs and reproducible assessment snapshots |
+| **Policy governance** | Organization-scoped versions, author/approver separation, recorded impact simulations, approval reasons and activation audit |
+| **Document vault** | PDF/TXT uploads, content integrity checks, optional OCR and malware-scanner integration; AES-256-GCM encrypted storage with configured institutional keys and bounded PDF subprocess parsing |
+| **Identity and access** | Demo roles, borrower/object ownership checks, CSRF protection, and OIDC authorization-code/PKCE with MFA-claim validation for configured institutional identity providers |
+| **Integrations** | Synthetic provider fixtures, consent-aware adapters and an authenticated, signed partner-gateway contract; no live financial-provider access |
+| **Credit-risk research** | Reproducible synthetic outcome generation, an offline interpretable model-training pipeline, chronological holdout metrics and feature-drift diagnostics |
+| **Operations** | Database migrations, reassessment worker, health checks, metrics, backup/recovery scripts and CI across Windows, Ubuntu, Chromium and PostgreSQL |
+
+### Where AI fits
+
+The decision shown in the workspace is **deterministic and explainable**. A favorable predictive score cannot override missing identity, legal, property or consent requirements.
+
+The repository also contains an **offline credit-risk research pipeline**: it trains an interpretable logistic-regression model, evaluates chronological holdout data and records calibration-related metrics. Its included evaluation uses generated records and invented outcomes. **There is no validated real-mortgage probability-of-default model in the live decision engine.** OCR and document extraction support evidence review but do not authenticate document issuers.
+
+## Architecture
 
 ```mermaid
 flowchart LR
-    A[Borrower application] --> B[Consent and evidence]
-    B --> C[Source verification and conflicts]
-    C --> D[Income, EMI, FOIR, LTV]
-    D --> E[Versioned Home Loan / LAP policy]
-    E --> F{Deterministic decision}
-    F --> G[APPROVE / REFER / REJECT]
-    G --> H[Assessment snapshot, audit and replay]
-    B --> I[Revision and reassessment queue]
-    I --> C
+    UI[Browser workspace] --> API[FastAPI REST API]
+    API --> AUTH[Session, OIDC and role checks]
+    API --> DB[(SQLAlchemy / PostgreSQL or SQLite)]
+    API --> E[Evidence and consent services]
+    API --> FIN[Financial calculations]
+    API --> RULES[Deterministic policy engine]
+    E --> GATEWAY[Fixture / signed partner gateway]
+    API --> DOCS[Encrypted document storage]
+    API --> JOBS[Reassessment queue]
+    JOBS --> WORKER[Background worker]
+    WORKER --> RULES
+    RULES --> DB
+    DB --> REPLAY[Assessment snapshots and replay]
+    API --> REPLAY
 ```
 
-An application stores its product, applicant category, requested loan terms, property details, workflow status, ownership, and evidence revision. The service builds an assessment from the latest permissible evidence and the active policy belonging to the same lender organization. It persists the input snapshot, executed rules, calculation results, reason codes, policy version, and engine version. A later change creates a new assessment; historical decisions remain available for comparison and replay.
-
-**Decision precedence:** confirmed policy failure produces `REJECT`; missing, expired, conflicting, or otherwise unresolved mandatory information produces `REFER`; `APPROVE` is returned only when every applicable gate passes. These outcomes describe the demonstration policy engine. They are not binding lender sanctions, and configured simulation data cannot satisfy live-production verification requirements.
-
-| Area | Implementation | Boundary |
-| --- | --- | --- |
-| Products | Separate Home Loan and Loan Against Property policy packs | Thresholds are demonstration assumptions, not lender or universal RBI rules |
-| Affordability | Decimal-based EMI, FOIR, LTV, monthly surplus, maximum eligible principal, total interest and repayment | Co-applicant income is not automatically added to accepted income |
-| Income | Transaction normalization, reversal handling, duplicate suppression, own-account transfer exclusion, coverage and volatility checks | Analyst-submitted reconciliation is a preview; only authenticated source evidence can affect underwriting |
-| Evidence | Consent, provider mode, source call provenance, freshness, revisions, contradictions and follow-up requests | A `SIMULATED` source is never a real issuer or bureau verification |
-| Documents | Bounded PDF/TXT uploads, optional OCR, malware-scanner gate, AES-256-GCM encrypted local storage, isolated PDF parser process | OCR does not prove authenticity; parser isolation is not a hardened container sandbox |
-| Identity | Role and organization checks, borrower object-level access, CSRF, OIDC authorization-code/PKCE and MFA-claim checks | Production SSO needs a lender IdP and pre-provisioned users |
-| Governance | Lender-scoped policy versions, independent simulation and approval, recorded reasons, audit history | External legal, credit and compliance sign-off remains separate |
-| Risk research | Deterministic synthetic dataset generation, logistic-regression training, chronological evaluation and input-drift diagnostics | Research output is not activated as a production probability-of-default model |
-| Recovery | SQLite ciphertext-aware archives; Docker PostgreSQL and document-volume restore drill | CI recovery is not an institutional disaster-recovery certification |
-
-### Repository layout
+The backend is a modular monolith. FastAPI handles request validation and access control. SQLAlchemy persists applications, policies, evidence revisions, assessments and audit events. Alembic manages schema changes. The worker handles queued reassessments with input-revision checks to avoid committing obsolete jobs.
 
 ```text
 AadharShila/
 ├── src/aadharshila/
-│   ├── main.py                   # FastAPI routes, request validation and role checks
-│   ├── models.py                 # Lender, application, evidence, policy and audit entities
-│   ├── service.py                # Assessment snapshots, revisions and historical replay
-│   ├── engine.py                 # Deterministic decision and reason-code generation
-│   ├── finance.py                # Decimal EMI, FOIR, LTV, offers and stress calculations
-│   ├── income.py                 # Transaction normalization and income reconciliation
-│   ├── connectors.py             # Consent-bound fixture and signed partner gateway adapters
-│   ├── secure_documents.py       # AES-256-GCM storage and integrity checks
-│   ├── document_isolation.py     # Bounded PDF extraction subprocess
-│   ├── browser_sso.py            # OIDC authorization-code/PKCE login flow
-│   ├── production_gate.py        # External release-attestation signature validation
-│   ├── risk_training.py          # Offline logistic-regression research
-│   ├── synthetic_risk_benchmark.py
-│   ├── observability.py         # Request counters and latency aggregates
-│   ├── recovery.py              # Development backup, verification and restore
-│   └── worker.py                # Revision-aware reassessment jobs
-├── web/                          # Bundled browser client and styles
-├── policies/                     # Illustrative Home Loan and LAP JSON policies
-├── migrations/versions/          # Alembic schema revisions
-├── data/                         # Synthetic-data manifest and regulatory references
-├── docs/                         # Architecture, security, model, operations and release notes
-├── tests/                        # API, finance, tenant, document and security regressions
-├── scripts/                      # Browser, HTTP benchmark, backup and restore commands
-│   └── windows/                  # Drive-independent PowerShell launchers
-├── infra/                        # Production-style Compose illustration (not an approved deployment)
-├── docker-compose.yml            # Local PostgreSQL + API + worker
-├── .env.example                  # Configuration template
-└── setup.bat / run.bat / worker.bat / test.bat
+│   ├── main.py                 # REST API, authorization and workflow endpoints
+│   ├── service.py              # Assessment persistence, revisioning and replay
+│   ├── engine.py               # Policy evaluation and decision reasons
+│   ├── finance.py              # EMI, FOIR, LTV and scenario calculations
+│   ├── income.py               # Transaction and income reconciliation
+│   ├── connectors.py           # Consent-aware provider gateway contracts
+│   ├── secure_documents.py     # Authenticated encrypted document storage
+│   ├── document_isolation.py   # Bounded PDF extraction process
+│   ├── browser_sso.py          # OIDC/PKCE login and session handling
+│   ├── risk_training.py        # Offline model evaluation
+│   └── worker.py               # Revision-aware background jobs
+├── web/                        # Browser workspace (HTML, CSS, JavaScript)
+├── policies/                   # Illustrative Home Loan / LAP JSON policies
+├── migrations/versions/        # Versioned database migrations
+├── tests/                      # Functional, access-control and regression tests
+├── scripts/                    # Browser/HTTP tests, restore drills and Windows scripts
+├── infra/                      # Production-style configuration example
+├── docs/                       # Architecture, decision rules, operations and evidence
+└── docker-compose.yml          # Local PostgreSQL + API + worker
 ```
 
-The system is a modular monolith. It uses database records for application and evidence history, and a separate worker for asynchronous reassessment. Policy simulations do not overwrite decisions already recorded. Access control is enforced in the API and data queries; hiding a navigation item in the browser is not treated as authorization.
+**Stack:** Python · FastAPI · Pydantic v2 · SQLAlchemy 2 · Alembic · PostgreSQL 16 / SQLite · vanilla JavaScript · Playwright · pytest · Docker Compose · GitHub Actions. Optional research dependencies include scikit-learn; optional document processing uses Tesseract/PDFium and ClamAV when configured.
 
-## Prerequisites & Quickstart
+## Run locally
 
-- Python **3.11+**; Git; and internet access for the first dependency installation. The GitHub test matrix uses Python **3.12** on Windows and Ubuntu.
-- Optional: Docker Desktop/Engine with Compose for the PostgreSQL development stack; Node.js for the JavaScript syntax check; Playwright/Chromium for browser tests.
-- Optional research and document dependencies are installed separately. Tesseract, PDFium and a reachable ClamAV daemon are not included in the base install.
+### Windows (Python 3.11 or 3.12)
 
-### Windows: local development on `D:`
+Python **3.12** is used in GitHub CI; **3.11** is supported for local development. If you have multiple Python versions installed, create `.venv` with your selected interpreter *before* running `setup.bat`.
 
-The setup scripts resolve their own directory. Virtual environments, SQLite data and uploaded files remain under the selected project folder; no `C:` drive path is hard-coded.
+**New installation — Command Prompt:**
 
 ```bat
-mkdir D:\Projects
+if not exist D:\Projects mkdir D:\Projects
 cd /d D:\Projects
 git clone https://github.com/pushkkal0201-bit/AadharShila.git
 cd AadharShila
-
-:: Choose an installed interpreter; 3.12 is CI-tested, 3.11 is supported.
 py -3.11 -m venv .venv
 setup.bat
 run.bat
 ```
 
-For an existing checkout, run `git pull --ff-only origin main` from the project folder before `setup.bat`. Keep the server terminal open. In a second terminal, run `worker.bat` to process queued reassessments; `test.bat` runs the test suite. If a `.venv` already exists, inspect `.venv\Scripts\python.exe --version` before replacing it.
+**Existing checkout — Command Prompt:** Stop the running API first, then:
 
-### Linux / macOS: local development
+```bat
+cd /d D:\Projects\AadharShila
+git pull --ff-only origin main
+setup.bat
+run.bat
+```
+
+Open **http://127.0.0.1:8000**. Select **Credit analyst** and enter the demo password `Demo@12345`. In a second CMD window, run `worker.bat` for queued reassessments. Run `test.bat` to execute the Python suite.
+
+### Linux / macOS
 
 ```bash
 git clone https://github.com/pushkkal0201-bit/AadharShila.git
@@ -113,216 +217,104 @@ python -m alembic upgrade head
 python -m uvicorn aadharshila.main:app --host 127.0.0.1 --port 8000
 ```
 
-In a separate shell, activate the same virtual environment and run `python -m aadharshila.worker` if you need queued jobs.
-
-### Docker: PostgreSQL development stack
+### Docker with PostgreSQL
 
 ```bash
 cp .env.example .env
-# Edit .env; generate and set a unique SESSION_SECRET before starting.
+# Set a unique, non-demo SESSION_SECRET in .env before starting.
 docker compose up --build -d --wait
 docker compose ps
-docker compose logs -f api worker
 ```
 
-The Compose file starts PostgreSQL 16, the API and a worker; the API applies Alembic migrations before serving requests. The database and documents use Docker-managed volumes, which are **not** automatically stored under your Windows project directory. Use `docker compose down` to stop services without removing those volumes. Never use `docker compose down -v` against data you intend to retain.
+The development stack starts the API, PostgreSQL and a reassessment worker. Stop it with `docker compose down` to retain its volumes.
 
-### First-run endpoints
+### Useful endpoints
 
-| Address | Purpose |
+| Endpoint | Purpose |
 | --- | --- |
-| `http://127.0.0.1:8000/` | Underwriting workspace |
-| `http://127.0.0.1:8000/docs` | Interactive OpenAPI documentation |
-| `http://127.0.0.1:8000/health/live` | Process liveness |
-| `http://127.0.0.1:8000/health/ready` | Database readiness |
+| `http://127.0.0.1:8000/` | Analyst/borrower workspace |
+| `http://127.0.0.1:8000/docs` | Interactive OpenAPI explorer |
+| `GET /health/live` | Process health |
+| `GET /health/ready` | Database readiness |
+| `GET /api/v1/applications` | Authorized application queue |
+| `POST /api/v1/applications/{id}/assessments` | Reassess against current permissible evidence |
+| `GET /api/v1/assessments/{id}/explanation` | Executed rules and reason codes |
+| `POST /api/v1/assessments/{id}/replay` | Reproduce an earlier assessment |
 
 ```bash
 curl -sS http://127.0.0.1:8000/health/ready
 # {"status":"READY","database":"connected"}
 ```
 
-With `APP_ENV=development` and `SEED_DEMO=true`, first startup seeds **16 synthetic applications** and the following local accounts, all with password `Demo@12345`: `borrower`, `analyst`, `compliance`, `policy_author`, `policy_approver`, `auditor`, and `admin`. They are for local tests only. Password login and demo seeding are disabled in production mode.
+## Testing and evidence
 
-## Usage Examples
-
-### 1. Review an application through the HTTP API
-
-From a Bash-compatible shell, with the local demo server running:
-
-```bash
-BASE=http://127.0.0.1:8000
-
-curl -sS -c cookies.txt \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"analyst","password":"Demo@12345"}' \
-  "$BASE/api/v1/auth/login" > login.json
-
-curl -sS -b cookies.txt "$BASE/api/v1/applications?limit=50" > applications.json
-
-APP_ID=$(python -c 'import json; a=json.load(open("applications.json")); print(next(x["id"] for x in a["items"] if x["reference"]=="AS-1004"))')
-CSRF=$(python -c 'import json; print(json.load(open("login.json"))["csrf"])')
-
-curl -sS -b cookies.txt \
-  -H "X-CSRF-Token: $CSRF" \
-  -X POST "$BASE/api/v1/applications/$APP_ID/assessments" > assessment.json
-
-python -c 'import json; x=json.load(open("assessment.json")); print(x["outcome"]); print([r["code"] for r in x["result"]["reasons"]])'
-```
-
-Expected outcome for the unmodified synthetic `AS-1004` case (abbreviated):
-
-```text
-REFER
-['INCOME_CONTRADICTION']
-```
-
-`AS-1004` is a self-employed LAP application with conflicting income sources. The engine can report every evidence item as verified **within the fixture** and still refer the case because the amounts disagree. `AS-1003` demonstrates affordability failure; `AS-1007` demonstrates a provider-failure referral.
-
-For the saved assessment, the following endpoints expose the decision, explanation, evidence pack and replay. Replace `<assessment-id>` with the `id` field in `assessment.json`:
-
-```text
-GET  /api/v1/assessments/<assessment-id>/decision
-GET  /api/v1/assessments/<assessment-id>/explanation
-GET  /api/v1/assessments/<assessment-id>/evidence-pack
-POST /api/v1/assessments/<assessment-id>/replay
-GET  /api/v1/applications/<application-id>/assessment-diff
-```
-
-Replays use stored inputs and policy versions; they do not query a current external provider or rewrite the original decision.
-
-### 2. Reconcile transactions without changing an approved evidence record
-
-`POST /api/v1/applications/{id}/income-reconciliation` accepts a `TransactionBatch` and produces an analyst preview. The normalizer checks recurring income, own-account transfers, loan proceeds, reversals, duplicate receipts, observation coverage, volatility and obligations. The API returns `assessment_effect: "NONE"`. A preview cannot be promoted into verified bank evidence without the authenticated provider route and consent checks.
-
-Related analyst routes:
-
-```text
-GET  /api/v1/applications/<id>/evidence
-GET  /api/v1/applications/<id>/conflicts
-GET  /api/v1/applications/<id>/next-evidence
-POST /api/v1/applications/<id>/providers/<evidence-key>/run
-POST /api/v1/applications/<id>/property-review-preview
-GET  /api/v1/applications/<id>/sanction-preview
-```
-
-The sanction endpoint returns a **non-binding preview**. It does not issue a legally effective sanction, generate a lender-approved KFS, or initiate a disbursement.
-
-### 3. Govern policy changes without rewriting previous assessments
-
-A policy author creates and validates a lender-scoped draft. An authorized analyst or policy staff member runs a portfolio simulation, which stores the input policy's SHA-256 fingerprint and changed-outcome counts. A separate policy approver supplies a recorded justification to approve and activate the validated version. Approval fails if the policy has changed since its relevant simulation, if the same person performs conflicting steps, or if lender scope does not match.
-
-```text
-POST /api/v1/policies
-POST /api/v1/policies/<id>/validate
-POST /api/v1/policies/<id>/simulate
-POST /api/v1/policies/<id>/approve       {"reason":"Reviewed simulation and signed-off credit committee record"}
-POST /api/v1/policies/<id>/activate      {"reason":"Approved controlled policy release after committee review"}
-GET  /api/v1/policies/<id>/simulations
-GET  /api/v1/operations/governance-audit
-```
-
-These are **internal workflow controls**. A lender-owned policy, qualified legal review and institutional release attestations are still required before automated lending decisions can be authorized.
-
-### 4. Run reproducible credit-risk research
-
-Install the optional research requirements, then produce a fixed-seed dataset and offline holdout evaluation:
-
-```bash
-python -m pip install -r requirements-ml.txt
-python -m aadharshila.synthetic_risk_benchmark --output-dir .risk-ci --seed 42 --rows 640
-```
-
-Representative output fields:
-
-```json
-{
-  "status": "SYNTHETIC_TEST_ONLY",
-  "seed": 42,
-  "rows": 640,
-  "model_activated": false,
-  "holdout_test": { "roc_auc": 0.685803 }
-}
-```
-
-The displayed ROC AUC is a previously recorded synthetic-generator run, **not an estimate of real mortgage-default prediction quality**. The full output includes other holdout metrics and limitations; the research model is never loaded into live assessments. The offline pipeline rejects unknown label horizons, duplicate borrower IDs, incomplete source manifests and immature real-outcome labels.
-
-### 5. Run browser, API and recovery checks
+The engineering release recorded **109 passing local automated tests**. Its hosted GitHub Actions run also passed Windows and Ubuntu tests, a Chromium browser smoke and a PostgreSQL/document recovery drill. The CI badge above reflects subsequent runs as they complete.
 
 ```bash
 python -m pytest -q
 node --check web/app.js
 
+# Optional: browser smoke
 python -m pip install -r requirements-browser.txt
 python -m playwright install chromium
 python scripts/browser_smoke.py
 
+# Optional: bounded HTTP workload against a local synthetic dataset
 python scripts/http_benchmark.py --requests 60 --concurrency 6
+
+# Optional: reproducible synthetic risk research
+python -m pip install -r requirements-ml.txt
+python -m aadharshila.synthetic_risk_benchmark --output-dir .risk-ci --seed 42 --rows 640
 ```
 
-The HTTP benchmark authenticates to a newly started local synthetic-data API and reports request count, failures, p50/p95/p99 latency, process environment and workload. It is a bounded development smoke, not a production throughput or latency guarantee.
+A recorded local HTTP smoke completed 60/60 authenticated requests with approximately **47.6 ms p95** under its stated synthetic workload. It is not a production benchmark. Similarly, reported model metrics describe synthetic labels and are not evidence of real-world credit prediction quality.
 
-Docker PostgreSQL and document recovery drill:
+- [CI verification for the engineering release](https://github.com/pushkkal0201-bit/AadharShila/actions/runs/42780517502)
+- [Decision rules and formulas](docs/DECISION_RULES.md)
+- [Architecture and data flow](docs/ARCHITECTURE.md)
+- [Security boundaries](docs/SECURITY_REVIEW.md)
+- [Reproducible credit-risk research](docs/RISK_TRAINING.md)
+- [Operations and recovery](docs/OPERATIONS.md)
 
-```bash
-bash scripts/docker_backup.sh ./backup-dev
-bash scripts/docker_restore_drill.sh ./backup-dev
-```
+## Configuration
 
-The restore script verifies the recovered database and corresponding document bytes in a disposable recovery database. Backups of encryption keys are separate; never include private key material in Git or a public application archive. The CI workflow repeats Windows/Ubuntu tests, a Chromium smoke, and a Docker/PostgreSQL recovery exercise.
+Use `.env.example` for the Docker development stack. The Windows scripts use local SQLite defaults unless environment variables are already set.
 
-## Configuration / Environment Variables
+| Variable | Meaning |
+| --- | --- |
+| `APP_ENV` | `development` or `production`; production applies stricter safety checks |
+| `DATABASE_URL` | SQLite for single-machine development; PostgreSQL for the Docker stack |
+| `SEED_DEMO` | Enables 16 deterministic synthetic applications on initial development startup |
+| `SESSION_SECRET` | Session-signing secret; replace the development value before any shared deployment |
+| `UPLOAD_DIR` | Document storage location |
+| `AADHARSHILA_DOCUMENT_KEYS_PATH` | External AES-256-GCM document keyring path |
+| `AADHARSHILA_DOCUMENT_ACTIVE_KEY_ID` | Active key identifier for new encrypted uploads |
+| `ENABLE_DOCUMENT_OCR` | Enables optional OCR dependencies when installed |
+| `CLAMAV_UNIX_SOCKET` | Malware scanning service; unavailable production scanning blocks uploads |
+| `OIDC_*` | Institutional identity provider, client, pinned keys and callback configuration |
+| `AADHARSHILA_PARTNER_*` | Approved signed provider-gateway endpoints and credentials |
+| `AADHARSHILA_TRUST_STORE` / `AADHARSHILA_RELEASE_BUNDLE` | Institution-issued governance attestations |
+| `METRICS_ACCESS_TOKEN` | Protects the internal HTTP metrics endpoint |
 
-`.env.example` is the development template. Treat secrets, identity-provider registration, lender release attestations and provider credentials as external deployment dependencies. The table distinguishes application defaults from settings included in the Docker development template.
+Never commit `.env`, borrower documents, credentials, encryption keys or local database files.
 
-| Variable | Type | Default / requirement | Description |
-| --- | --- | --- | --- |
-| `APP_ENV` | `development` / `production` | `development` | Enables production safety restrictions, including rejection of SQLite and local password login. |
-| `DATABASE_URL` | SQLAlchemy URL | `sqlite:///./aadharshila.db`; Docker example uses PostgreSQL | Database connection; production requires externally managed PostgreSQL. |
-| `SEED_DEMO` | Boolean string | `true` in development | Inserts deterministic synthetic cases on initial startup. Must be `false` in production. |
-| `SESSION_SECRET` | String | Development-only placeholder | Signs local sessions and OIDC flow state; production requires a unique secret of at least 32 characters. |
-| `UPLOAD_DIR` | Filesystem path | `var/documents` | Local document bytes; application-relative on Windows, container-mounted in Docker. |
-| `AADHARSHILA_DOCUMENT_KEYS_PATH` | File path | Unset | External JSON keyring mapping key IDs to base64-encoded 32-byte AES keys. Required for production uploads. |
-| `AADHARSHILA_DOCUMENT_ACTIVE_KEY_ID` | String | Unset | Key ID used for **new** AES-256-GCM document uploads; old keys remain necessary for older ciphertext. |
-| `ENABLE_DOCUMENT_OCR` | Boolean string | `false` | Enables optional scanned-PDF OCR when the runtime dependencies are installed. |
-| `CLAMAV_UNIX_SOCKET` | Unix socket path | Unset | Scanner endpoint; production uploads fail closed when scanning cannot be completed. |
-| `OIDC_ISSUER` | HTTPS URL | Unset | Pinned identity-provider issuer. |
-| `OIDC_AUDIENCE` | String | Unset | Accepted API audience for signed federated identity tokens. |
-| `OIDC_JWKS_PATH` | File path | Unset | Institution-managed public signing keys; no automatic role creation from token claims. |
-| `OIDC_REQUIRE_MFA` | Boolean string | `true` | Enforces MFA-related assertions during federated-token validation. |
-| `OIDC_REQUIRED_ACR` | String | Unset | Optional required authentication-assurance claim. |
-| `OIDC_AUTHORIZATION_ENDPOINT` | HTTPS URL | Unset | Fixed browser authorization-code endpoint at the configured issuer. |
-| `OIDC_TOKEN_ENDPOINT` | HTTPS URL | Unset | Fixed authorization-code token exchange endpoint. |
-| `OIDC_CLIENT_ID` | String | Unset | Registered browser SSO client identifier. |
-| `OIDC_CLIENT_SECRET` | Secret | Unset | Registered SSO client credential; never commit it. |
-| `OIDC_REDIRECT_URI` | URL | Unset | Registered callback ending in `/api/v1/auth/oidc/callback`; HTTPS in production. |
-| `AADHARSHILA_PARTNER_ALLOWED_HOSTS` | Comma-separated hosts | Empty | Explicit HTTPS partner-gateway host allowlist. |
-| `AADHARSHILA_PARTNER_<KEY>_URL` | HTTPS URL | Unset | Configured gateway for one supported evidence key, e.g. `BANK_INCOME`. |
-| `AADHARSHILA_PARTNER_<KEY>_MODE` | `SANDBOX` / `LIVE` | `SANDBOX` when configured | Gateway mode; configured labels alone do not establish authorized source verification. |
-| `AADHARSHILA_PARTNER_<KEY>_NAME` | String | Unset | Approved integration/provider name. |
-| `AADHARSHILA_PARTNER_<KEY>_TOKEN` | Secret | Unset | Gateway request authentication. |
-| `AADHARSHILA_PARTNER_<KEY>_HMAC_KEY` | Secret | Unset | Signed-response verification secret. |
-| `AADHARSHILA_TRUST_STORE` | File path | Unset | Public keys and institutional roles for release attestations. |
-| `AADHARSHILA_RELEASE_BUNDLE` | File path | Unset | Externally signed, lender/product/policy-scoped release attestations. |
-| `METRICS_ACCESS_TOKEN` | Secret | Unset | When configured with at least 24 characters, protects `/internal/metrics` via `X-Metrics-Token`. |
+## Demonstration boundaries
 
-`APP_ENV=production` and a configured gateway do **not** create the legal right to originate credit. The release verifier checks Ed25519 signatures, role separation, dates and policy scope; the institution must independently establish each signer's authority and the underlying approval. The real-data credit-risk model, official KYC/bureau integrations, binding sanctions and disbursement are **not operational components** of this repository. The deployment example at `infra/compose.production.example.yml` is a reference requiring lender-managed infrastructure, network policy, secrets, scanner services and security review.
+**What is present:** an auditable underwriting workflow, explicit decision reasons, historical replay, configurable policies, structured provider contracts, security controls and repeatable synthetic tests.
+
+**What is not authorized or proven:** live CKYCR/DigiLocker, Account Aggregator, credit bureau, GST or property-registry access; validated real-mortgage default prediction; lender-approved credit terms; independently certified production security; binding sanction documents; or disbursement. Document subprocess isolation also requires an OS/container sandbox for actual untrusted borrower files.
+
+The software deliberately blocks real-production approval paths without the institution's release prerequisites. For exact requirements, see [institutional go-live controls](docs/INSTITUTIONAL_GO_LIVE.md) and the [production-readiness matrix](docs/PRODUCTION_READINESS.md).
 
 ## Contributing
 
-Work against the current `main` branch. Keep policy values and synthetic fixture data distinguishable from statutory requirements or lender-authorized inputs.
+Branch from `main`. Keep changes scoped to a subsystem and add regression tests for new rules, evidence states, access-control decisions and migrations.
 
 ```bash
-git checkout main
-git pull --ff-only origin main
-git checkout -b fix/describe-change
-
 python -m pip install -r requirements-ml.txt
 python -m pip install --no-deps -e .
 python -m pytest -q
 node --check web/app.js
-python -m alembic upgrade head
 ```
 
-For changes to authentication, evidence handling, policy activation or document access, add a regression that exercises both the permitted path and the denied path. For changes to persisted entities, include an Alembic migration and test it against a fresh database and a backed-up upgrade candidate. Run the browser smoke for UI changes; run the PostgreSQL recovery drill for storage or deployment changes.
-
-Open a pull request with the failure or requirement, affected endpoints and tables, migrations, tests executed, expected behavior and known limitations. Do not include borrower records, secrets, signed-provider credentials, unapproved policy figures or model artifacts trained on restricted data. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/ENGINEERING_RELEASE_2026-11-10.md`](docs/ENGINEERING_RELEASE_2026-11-10.md), [`docs/PRODUCTION_READINESS.md`](docs/PRODUCTION_READINESS.md) and [`docs/INSTITUTIONAL_GO_LIVE.md`](docs/INSTITUTIONAL_GO_LIVE.md) for the corresponding engineering and release boundaries.
+Open a pull request with the behavior changed, migration impact, test results and any new security or regulatory assumptions. Do not rewrite saved assessment history, turn synthetic provider results into live claims, or bypass required review controls.
