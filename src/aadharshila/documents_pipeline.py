@@ -19,6 +19,10 @@ def clamav_scan(raw: bytes, socket_path: str | None = None) -> str:
         return 'NOT_PERFORMED'
     if len(raw)>8*1024*1024:
         raise DocumentSafetyError('UPLOAD_TOO_LARGE')
+    # Windows Python builds may omit AF_UNIX entirely. Explicitly report the
+    # unavailable scanner rather than crashing or treating an upload as clean.
+    if not hasattr(socket,'AF_UNIX'):
+        raise DocumentSafetyError('MALWARE_SCANNER_UNAVAILABLE')
     try:
         with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as connection:
             connection.settimeout(8)

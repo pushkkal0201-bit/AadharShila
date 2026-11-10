@@ -72,3 +72,13 @@ Do not ship to real borrowers before these obligations are independently fulfill
 ## Additional borrower privacy regression
 
 The non-binding sanction preview filters staff-only sanctions/screening, provider-failure and document-reuse codes from borrower views while preserving an actionable generic review indicator. The analyst's full evidence/reason view is retained. Covered by `test_sanction_preview_redacts_staff_screening_signals`.
+
+## Windows scanner portability
+
+Some Windows Python distributions do not define `socket.AF_UNIX`. On those
+builds a configured Unix-socket ClamAV scan raises the documented
+`MALWARE_SCANNER_UNAVAILABLE` dependency failure rather than `AttributeError`.
+In production an unavailable scanner blocks upload; no scan is marked CLEAN
+without an actual scanner result. Run the scanner on a supported Linux host
+or use an institution-approved Windows scanning integration that implements the
+same fail-closed contract.

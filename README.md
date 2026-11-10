@@ -206,4 +206,4 @@ See [`docs/ENGINEERING_STAGE_2026-11-10.md`](docs/ENGINEERING_STAGE_2026-11-10.m
 
 ### Latest engineering verification (10 November 2026)
 
-The extended workbench passed **90 local pytest tests** and `node --check web/app.js`. The OIDC migration is `f71a63c80927`. The previous CI results verify the earlier main branch only; rerun hosted Windows/Ubuntu/Docker jobs after this stage is merged. See the current [engineering stage report](docs/ENGINEERING_STAGE_2026-11-10.md) and [readiness matrix](docs/PRODUCTION_READINESS.md) for limitations.
+The extended workbench passed **91 local pytest tests** and `node --check web/app.js`. The OIDC migration is `f71a63c80927`. The previous CI results verify the earlier main branch only; rerun hosted Windows/Ubuntu/Docker jobs after this stage is merged. See the current [engineering stage report](docs/ENGINEERING_STAGE_2026-11-10.md) and [readiness matrix](docs/PRODUCTION_READINESS.md) for limitations.

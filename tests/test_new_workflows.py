@@ -85,6 +85,13 @@ def test_clamav_scanner_fail_closed():
     with pytest.raises(DocumentSafetyError,match='MALWARE_SCANNER_UNAVAILABLE'):
         clamav_scan(b'content','/not/a/real/scanner.sock')
 
+
+def test_clamav_windows_without_af_unix_fails_closed(monkeypatch):
+    import aadharshila.documents_pipeline as scanner
+    monkeypatch.delattr(scanner.socket,'AF_UNIX',raising=False)
+    with pytest.raises(DocumentSafetyError,match='MALWARE_SCANNER_UNAVAILABLE'):
+        clamav_scan(b'content','/scanner/that/is/not/available.sock')
+
 @pytest.mark.skipif(os.name=='nt',reason='ClamAV Unix-socket contract requires POSIX; use a Linux scanner container on Windows')
 def test_clamav_protocol_reports_clean(tmp_path):
     socket_path=str(tmp_path/'clamd.sock')
