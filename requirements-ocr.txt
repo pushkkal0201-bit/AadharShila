@@ -1,0 +1,4 @@
+-r requirements.txt
+pypdfium2>=4.29,<6
+pytesseract>=0.3.10,<1
+Pillow>=10,<13

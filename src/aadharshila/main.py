@@ -18,6 +18,12 @@ from .engine import evaluate
 from .connectors import fetch_and_record, configured_adapter
 from .production_gate import evaluate_configured
 from .seed import seed
+from .income import TransactionBatch, reconcile
+from .documents_pipeline import clamav_scan, extract_pdf, DocumentSafetyError
+from .sanction import preview as sanction_preview
+from .property_intelligence import PropertyReview, evaluate_property
+from .risk_monitor import population_stability_index
+from .compliance_controls import check_application, CONTROL_REGISTRY
 
 ROOT=Path(__file__).resolve().parents[2]
 @asynccontextmanager
@@ -149,6 +155,8 @@ def ready(db:Session=Depends(get_db)):
 
 @app.post('/api/v1/auth/login')
 def login(body:Login,response:Response,db:Session=Depends(get_db)):
+    if os.getenv('APP_ENV','development')=='production':
+        raise HTTPException(403,'Local password login is disabled in production')
     user=db.scalar(select(User).where(User.username==body.username))
     if not user or not verify_password(body.password,user.password_hash) or not user.active:
         raise HTTPException(status_code=401,detail='Invalid credentials')
@@ -457,32 +465,43 @@ def production_readiness(db:Session=Depends(get_db),user:User=Depends(current_us
     for key in keys:
         adapter,error=configured_adapter(key)
         providers[key]={'configuration_mode':adapter.mode if adapter else 'UNAVAILABLE',
-                        'configuration_error':error,'live_verified':False}
+                        'configuration_error':error, 'live_verified':False}
     policies={}
     for product in ('HOME_LOAN','LAP'):
         try:
             policy=active_policy(db,product,user.org_id)
             config={**policy.config,'version':policy.version}
             gate=evaluate_configured(organization_id=user.org_id,product=product,policy=config)
-            policies[product]={'active_policy_version':policy.version,'signed_attestations':gate}
+            policies[product]={'active_policy_version':policy.version,
+                               'signed_attestations':gate}
         except ValueError:
             policies[product]={'active_policy_version':None,'error':'ACTIVE_POLICY_MISSING'}
+    # This reports external signature verification, not institution/issuer licensing.
     all_signed=all(p.get('signed_attestations',{}).get('valid',False) for p in policies.values())
     return {'application':'Aadharshila','environment':os.getenv('APP_ENV','development'),
             'automatic_real_underwriting':('SIGNED_GOVERNANCE_PREREQUISITES_PRESENT'
                 if all_signed and os.getenv('APP_ENV')=='production' else 'BLOCKED_BY_GOVERNANCE_GATE'),
             'production_authorizations':policies.get('HOME_LOAN',{}).get('signed_attestations',{}).get('requirements',{}),
-            'per_product':policies,'providers':providers,
-            'note':'Verified signatures are not independent verification of legal authority or licensing.'}
+            'per_product':policies,
+            'providers':providers,
+            'note':'Signatures are checked against an institution-configured trust store. Licensing, legal competence, and production certification cannot be established by this software.'}
+
+@app.get('/api/v1/applications/{id}/compliance-checks')
+def application_compliance_checks(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
+    require(user,{'ANALYST','COMPLIANCE','AUDITOR','ADMIN'})
+    row=load_app(db,id,user)
+    assessment=latest_assessment(db,id)
+    if assessment is None:raise HTTPException(409,'Assessment required')
+    return check_application(assessment.snapshot['input'],assessment.result)
 
 @app.get('/api/v1/compliance/register')
 def compliance_register(user:User=Depends(current_user)):
-    return {'items':json.loads((ROOT/'data'/'regulatory-register.json').read_text()),
+    return {'items':json.loads((ROOT/'data'/'regulatory-register.json').read_text()),'engineering_control_registry':CONTROL_REGISTRY,
         'note':'Official primary-source references only. No clause-specific legal certification or executable regulatory controls.'}
 
 @app.get('/api/v1/connectors')
 def connector_matrix(user:User=Depends(current_user)):
-    names=[('Identity/KYC','identity'),('CKYCR',None),('DigiLocker',None),('Account Aggregator','bank_income'),('Credit bureau','bureau'),('GST/tax','income_support'),('Property registry','ownership'),('CERSAI',None),('RERA',None),('Valuation','valuation'),('Sanctions/PEP','screening')]
+    names=[('Identity/KYC','identity'),('CKYCR','ckyc'),('DigiLocker','digilocker'),('Account Aggregator','account_aggregator'),('Bank income','bank_income'),('Bank transactions','bank_transactions'),('Credit bureau','bureau'),('GST/tax','gst'),('Income support','income_support'),('Property registry','property_registry'),('CERSAI','cersai'),('RERA','rera'),('Valuation','valuation'),('Legal/title','legal'),('Sanctions/PEP','screening')]
     records=[]
     for name,key in names:
         adapter,error=configured_adapter(key) if key else (None,'PROVIDER_SPECIFIC_INTEGRATION_REQUIRED')
@@ -504,6 +523,40 @@ def run_provider(id:str,key:str,db:Session=Depends(get_db),user:User=Depends(cur
     db.commit()
     return response
 
+@app.post('/api/v1/applications/{id}/income-reconciliation')
+def income_reconciliation(id:str,body:TransactionBatch,db:Session=Depends(get_db),user:User=Depends(current_user)):
+    require(user,{'ANALYST','COMPLIANCE','ADMIN'})
+    a=load_app(db,id,user)
+    if body.applicant_type!=a.applicant_type:raise HTTPException(422,'Applicant category mismatch')
+    result=reconcile(body)
+    # Exploratory financial calculation. Only independently authenticated provider evidence
+    # can be materialized into an underwriting assessment by the evidence pipeline.
+    return {**result,'assessment_effect':'NONE','source_mode':'ANALYST_SUBMITTED_PREVIEW',
+            'note':'Not independent bank verification, cannot authorize a mortgage decision.'}
+
+@app.post('/api/v1/applications/{id}/property-review-preview')
+def property_review_preview(id:str,body:PropertyReview,db:Session=Depends(get_db),user:User=Depends(current_user)):
+    require(user,{'ANALYST','COMPLIANCE','ADMIN'})
+    load_app(db,id,user)
+    return {**evaluate_property(body),'assessment_effect':'NONE'}
+
+class DriftRequest(BaseModel):
+    reference_counts:list[int]=Field(min_length=2,max_length=200)
+    current_counts:list[int]=Field(min_length=2,max_length=200)
+
+@app.post('/api/v1/monitoring/feature-drift')
+def feature_drift(body:DriftRequest,user:User=Depends(current_user)):
+    require(user,{'ANALYST','COMPLIANCE','AUDITOR','ADMIN'})
+    try:return population_stability_index(body.reference_counts,body.current_counts)
+    except ValueError as exc:raise HTTPException(422,str(exc))
+
+@app.get('/api/v1/applications/{id}/sanction-preview')
+def get_sanction_preview(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
+    a=load_app(db,id,user)
+    item=latest_assessment(db,id)
+    if not item:raise HTTPException(409,'Assessment required before a preview')
+    return sanction_preview(item,a,borrower_view=user.role=='BORROWER')
+
 @app.get('/api/v1/applications/{id}/provider-calls')
 def provider_calls(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
     load_app(db,id,user)
@@ -523,15 +576,18 @@ async def upload_document(id:str,file:UploadFile=File(...),db:Session=Depends(ge
     media='application/pdf' if is_pdf else 'text/plain'
     digest=hashlib.sha256(raw).hexdigest();document_id=str(uuid.uuid4());destination=UPLOADS/(document_id+('.pdf' if is_pdf else '.txt'))
     text_output='';status='PARSED';fields={}
+    try:
+        scan_result=clamav_scan(raw)
+    except DocumentSafetyError as exc:
+        raise HTTPException(422 if str(exc)=='MALWARE_DETECTED' else 503,str(exc))
+    if os.getenv('APP_ENV','development')=='production' and scan_result!='CLEAN':
+        raise HTTPException(503,'Production document upload requires functioning malware scanner')
     if is_pdf:
-        try:
-            from pypdf import PdfReader
-            reader=PdfReader(io.BytesIO(raw))
-            if reader.is_encrypted:raise ValueError('Encrypted PDF requires a permitted review workflow')
-            text_output='\n'.join((page.extract_text() or '') for page in reader.pages[:50])[:40000]
-            if not text_output.strip():status='NEEDS_OCR'
-        except Exception as exc:
-            status='EXTRACTION_FAILED';fields['parse_error']=type(exc).__name__
+        extracted=extract_pdf(raw,ocr_enabled=os.getenv('ENABLE_DOCUMENT_OCR','false').lower()=='true')
+        text_output=extracted.get('text','');status=extracted['status']
+        fields={'signature_check':extracted['signature'],'ocr_status':extracted['ocr'],
+                'page_count':extracted.get('page_count')}
+        if 'error' in extracted:fields['parse_error']=extracted['error']
     else:
         try:text_output=raw.decode('utf-8')[:40000]
         except UnicodeDecodeError:raise HTTPException(415,'Text file is not UTF-8')
@@ -546,7 +602,7 @@ async def upload_document(id:str,file:UploadFile=File(...),db:Session=Depends(ge
     if a.workflow!='DRAFT':build_assessment(db,a,user)
     audit(db,id,user,'DOCUMENT_UPLOADED',detail={'document_id':doc.id,'sha256':digest,'parse_status':status})
     db.commit()
-    return {'id':doc.id,'status':status,'sha256':digest,'fields':fields,'verified':False,'malware_scan':'NOT_PERFORMED'}
+    return {'id':doc.id,'status':status,'sha256':digest,'fields':fields,'verified':False,'malware_scan':scan_result}
 
 @app.get('/api/v1/applications/{id}/documents')
 def list_documents(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):

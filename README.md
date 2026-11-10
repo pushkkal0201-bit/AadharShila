@@ -170,7 +170,7 @@ This is a substantial locally runnable integrated demonstrator, **not a producti
 
 ## Production-hardening additions (10 November 2026)
 
-The code includes a **fail-closed production governance gate**: `APP_ENV=production` always routes local decisions to `REFER`. Simulated and sandbox evidence cannot satisfy production verification prerequisites, and a `LIVE` label alone never authorizes a lender decision. The product must not be presented as issuing real credit approval or rejection.
+The code includes a **fail-closed production governance gate**: `APP_ENV=production` routes decisions to `REFER` unless externally issued authorization and authenticated live evidence satisfy all configured mandatory gates. Simulated and sandbox evidence cannot satisfy production verification prerequisites, and a `LIVE` label alone never authorizes a lender decision. The product must not be presented as issuing real credit approval or rejection.
 
 A fixed HTTPS **partner gateway adapter** now supports signed response validation, consent enforcement, bounded timeouts, correlation IDs, and fail-closed error reporting for an institution's separately authorized integration. **No real lender, credit-bureau, government, AA or KYC provider connection has been enabled.** See [`docs/PROVIDER_ONBOARDING.md`](docs/PROVIDER_ONBOARDING.md). Internal security regression tests and residual risks are tracked in [`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md).
 
@@ -182,16 +182,28 @@ A **portable SQLite backup and restore tool** includes document bytes, SHA-256 v
 
 Before a genuine financial institution could use this platform for actual borrowers, its authorized staff and suppliers must provide: provider contracts and API credentials; legally valid borrower-consent terms; permitted data access; independently approved and calibrated model data; lender-adopted credit policies; a qualified third-party security review; contractual and regulatory counsel sign-off; and secure hosted deployment with backup/failover exercises. None can be genuinely self-certified by a software project. The local engineering build deliberately keeps these dependencies visible rather than issuing fictional approvals.
 
-## Institutional release verification (10 November 2026)
+## Cryptographic production-release control (10 November 2026)
 
-`src/aadharshila/production_gate.py` checks independent Ed25519 attestations scoped to the exact active policy, lender organization and product. Production requires authenticated LIVE evidence linked to a successful provider invocation, not a standalone LIVE flag, and refuses SQLite. See [Institutional Go Live](docs/INSTITUTIONAL_GO_LIVE.md).
+`src/aadharshila/production_gate.py` adds **six independently signed, scope-limited release attestations**. The signatures are checked against institution-provisioned Ed25519 public keys and the exact active policy fingerprint. Production evidence is accepted only when linked to a successful signed provider invocation, not from an arbitrary `LIVE` flag. Production refuses SQLite. See [Institutional Go Live](docs/INSTITUTIONAL_GO_LIVE.md) for approved signers, schema, limitations and the verification CLI.
 
-These safeguards do **not** establish licensing, provider contracts, independent legal review, real-world model accuracy or authorization to issue mortgages.
+These are technical safeguards, **not proof of lender licensing, legal compliance, real-world model validity or permission to access regulated providers**. No authorization documents, credentials or genuine loan data have been provided. The application still requires enterprise identity, independent review and lender-owned implementation before use with actual borrowers.
 
-## Lender isolation and live evidence binding
+## Lender isolation and evidence integrity
 
-Policy packs now belong to a specific lender organization. The active Home Loan/LAP policy, policy versions, simulations and authorization flow are scoped to the lender. Only one policy per lender/product may be ACTIVE. The migration c91e8a2048f1 backfills historical policy ownership using author/approver accounts and stops if a safe mapping is impossible; back up the database and verify a staging migration first.
+Mortgage credit policy is scoped by organization: the active Home Loan/LAP policy, policy versions, approval/activation actions and simulations cannot cross lender boundaries. A unique partial index permits only one ACTIVE version per lender and product. The migration `c91e8a2048f1` backfills existing policies from their author/approver organizations and stops if ownership cannot be established. Run a backup and test the migration in staging before upgrading a shared database.
 
-Configured LIVE provider assertions are now bound to a digest of their exact recorded evidence payload. Modified or unlinked payloads do not satisfy the production evidence prerequisite. This is a consistency safeguard, not immutable storage, independent security certification or proof of licensed access.
+For a configured LIVE partner integration, a signed invocation is also tied to a SHA-256 digest of the exact evidence payload. A modified or unlinked payload cannot satisfy the live-evidence gate. This is an application-level consistency measure, **not** tamper-proof storage or proof that a provider is legally authorized.
 
-The detailed engineering review and external readiness boundaries are in [the 10 November gap assessment](docs/GAP_ASSESSMENT_2026-11-10.md).
+See [the 10 November engineering gap assessment](docs/GAP_ASSESSMENT_2026-11-10.md) for verified work, outstanding infrastructure and regulatory approvals.
+
+## November 10, 2026 — extended underwriting workbench
+
+The next engineering stage adds independently testable transaction normalization, a property comparable-analysis preview, optional scanned-PDF OCR, a ClamAV-compatible upload scanner (production fails closed without it), scoped LIVE-provider consent, OIDC bearer token verification with MFA claims and an explicit approved-user subject mapping, non-binding sanction previews, feature-drift PSI, and clause-referenced compliance evidence diagnostics. The interface includes **Income reconciliation**, **Property review**, and **Sanction readiness** tabs.
+
+None of these additions authorizes a real mortgage. The new analytic endpoints cannot increase accepted income from unverified analyst-supplied data or convert simulated cases into binding loan decisions. LIVE providers, credit-risk model validation, institutional policy/legal sign-off and real disbursement remain absent.
+
+See [`docs/ENGINEERING_STAGE_2026-11-10.md`](docs/ENGINEERING_STAGE_2026-11-10.md) for the exact API, environment, evidence and validation boundaries. Windows D: drive startup scripts are unchanged. OCR requires optional `requirements-ocr.txt` and an OS-installed Tesseract; ClamAV Unix socket scanning requires an actual local scanner (often supplied by a Linux container alongside Windows development).
+
+### Latest engineering verification (10 November 2026)
+
+The extended workbench passed **91 local pytest tests** and `node --check web/app.js`. The OIDC migration is `f71a63c80927`. The previous CI results verify the earlier main branch only; rerun hosted Windows/Ubuntu/Docker jobs after this stage is merged. See the current [engineering stage report](docs/ENGINEERING_STAGE_2026-11-10.md) and [readiness matrix](docs/PRODUCTION_READINESS.md) for limitations.

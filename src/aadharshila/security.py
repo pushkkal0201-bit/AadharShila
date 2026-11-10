@@ -6,6 +6,8 @@ from fastapi import Request, HTTPException, Depends
 from sqlalchemy.orm import Session
 from .db import get_db
 from .models import User
+from .federated_auth import validate_federated_token, FederatedAuthenticationError
+from sqlalchemy import select
 
 SECRET=os.getenv('SESSION_SECRET','development-only-secret-change-before-deploy')
 if os.getenv('APP_ENV','development')=='production':
@@ -34,9 +36,19 @@ def current_user(request:Request,db:Session=Depends(get_db)):
     bearer=request.headers.get('authorization','')
     token=bearer[7:] if bearer.lower().startswith('bearer ') else request.cookies.get('aadharshila_session')
     if not token:raise HTTPException(status_code=401,detail='Authentication required')
-    try: data=jwt.decode(token,SECRET,algorithms=['HS256'])
-    except jwt.PyJWTError:raise HTTPException(status_code=401,detail='Invalid or expired session')
-    user=db.get(User,data.get('sub'))
+    if os.getenv('APP_ENV','development')=='production':
+        # Local session cookies and HMAC demonstration tokens cannot be used
+        # to access borrower records in a live deployment.
+        if not bearer.lower().startswith('bearer '):
+            raise HTTPException(status_code=401,detail='Federated bearer authentication required')
+        try: claims=validate_federated_token(token)
+        except FederatedAuthenticationError:
+            raise HTTPException(status_code=401,detail='Invalid federated identity') from None
+        user=db.scalar(select(User).where(User.oidc_subject==claims['sub']))
+    else:
+        try: data=jwt.decode(token,SECRET,algorithms=['HS256'])
+        except jwt.PyJWTError:raise HTTPException(status_code=401,detail='Invalid or expired session')
+        user=db.get(User,data.get('sub'))
     if not user or not user.active:raise HTTPException(status_code=401,detail='Invalid account')
     if not bearer and request.method in ('POST','PATCH','PUT','DELETE'):
         csrf=request.cookies.get('aadharshila_csrf')
