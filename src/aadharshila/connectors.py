@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from .models import Evidence, Application, Consent, ProviderInvocation
 from .service import bump, build_assessment, audit
 
-SUPPORTED_KEYS = {'identity', 'bank_income', 'income_support', 'bureau', 'ownership', 'legal', 'valuation', 'screening'}
+SUPPORTED_KEYS = {'identity', 'bank_income', 'income_support', 'bureau', 'ownership', 'legal', 'valuation', 'screening', 'bank_transactions', 'ckyc', 'digilocker', 'account_aggregator', 'gst', 'property_registry', 'cersai', 'rera'}
 REQUIRED_PURPOSE = 'financial_underwriting'
 
 
@@ -187,7 +187,7 @@ class PartnerGatewayConnector:
                                    {'error': category}, category)
 
 
-def consent_authorized(db, app):
+def consent_authorized(db, app, *, evidence_key=None, provider=None, mode=None):
     now = datetime.now(timezone.utc)
     for consent in db.scalars(select(Consent).where(
             Consent.application_id == app.id,
@@ -196,8 +196,13 @@ def consent_authorized(db, app):
         expiry = consent.expires_at
         if expiry and expiry.tzinfo is None:
             expiry = expiry.replace(tzinfo=timezone.utc)
-        if not expiry or expiry > now:
-            return True
+        if expiry and expiry<=now:continue
+        if mode=='LIVE' or (mode=='SANDBOX' and os.getenv('APP_ENV','development')=='production'):
+            # A broad loan consent is insufficient for a regulated third-party
+            # retrieval. The borrower must grant this provider and category.
+            if consent.subject_id!=app.owner_id or consent.provider!=provider or evidence_key not in (consent.categories or []):
+                continue
+        return True
     return False
 
 
@@ -216,10 +221,12 @@ def configured_adapter(key):
 def fetch_and_record(db, app, key, actor):
     if key not in SUPPORTED_KEYS:
         raise ValueError('Unsupported provider operation')
-    if not consent_authorized(db, app):
-        raise PermissionError('Borrower consent for financial underwriting is not active')
     request_id = str(uuid.uuid4())
     adapter, config_error = configured_adapter(key)
+    provider = getattr(getattr(adapter,'config',None),'provider',None)
+    mode = getattr(adapter,'mode',None)
+    if not consent_authorized(db,app,evidence_key=key,provider=provider,mode=mode):
+        raise PermissionError('Active, purpose-specific borrower/provider consent required')
     if adapter is None:
         reply = ConnectorResult('UNAVAILABLE', 'UNRESOLVED', 'FAILED', 'unconfigured-provider',
                                 {'error': config_error}, config_error)

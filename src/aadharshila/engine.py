@@ -3,6 +3,7 @@
 Policy limits below are *demonstration assumptions*, not Hero Housing rules.
 """
 from .finance import D, metrics, alternative, stress
+from .income import TransactionBatch, reconcile
 
 ENGINE_VERSION='deterministic-1'
 MANDATORY=['identity','bank_income','income_support','bureau','ownership','legal','valuation','screening']
@@ -66,6 +67,30 @@ def evaluate(snapshot, policy):
             conflicts.append({'code':'INCOME_CONTRADICTION','bank_income':float(b),'supporting_income':float(s),'severity':'BLOCKING','sources':['bank_income','income_support']})
             check('INCOME_CONTRADICTION','UNRESOLVED','conflict')
     accepted_income=D(numeric['bank_income']) if numeric.get('bank_income') is not None else D(0)
+    transaction_result=None
+    transaction_source=ev.get('bank_transactions')
+    if transaction_source:
+        source_verified=(transaction_source.get('verification')=='VERIFIED'
+            and not transaction_source.get('expired',False) and
+            (not production or (transaction_source.get('mode')=='LIVE'
+                and transaction_source.get('live_authenticated') is True)))
+        if not source_verified:
+            check('TRANSACTION_RECONCILIATION_UNRESOLVED','UNRESOLVED','income',
+                  'Transaction evidence is not independently authenticated')
+        else:
+            try:
+                detail=transaction_source['value']
+                report=TransactionBatch.model_validate({**detail,'applicant_type':app['applicant_type']})
+                transaction_result=reconcile(report)
+                if transaction_result['status']!='CALCULATED':
+                    check('TRANSACTION_RECONCILIATION_UNRESOLVED','UNRESOLVED','income',
+                          'Transaction history requires analyst reconciliation')
+                else:
+                    # No income uplift based solely on transaction classification.
+                    accepted_income=min(accepted_income,D(transaction_result['accepted_monthly_income']))
+            except (ValueError,TypeError,KeyError) as exc:
+                check('TRANSACTION_RECONCILIATION_UNRESOLVED','UNRESOLVED','income',
+                      'Transaction normalization failed validation')
     # No optimistic income selection: any mismatch blocks approval.
     if accepted_income<0: accepted_income=D(0)
     property_value=D(numeric['valuation']) if numeric.get('valuation') is not None else D(0)
@@ -77,6 +102,8 @@ def evaluate(snapshot, policy):
     obligations=D(app['existing_obligations'])
     if ev.get('obligations') and ev['obligations'].get('verification')=='VERIFIED' and not ev['obligations'].get('expired',False):
         obligations=max(obligations,D(ev['obligations']['value'].get('amount',0)))
+    if transaction_result:
+        obligations=max(obligations,D(transaction_result['observed_monthly_obligations']))
     try:
         fin=metrics(app['amount'],policy['annual_rate_percent'],app['tenure_months'],accepted_income,obligations,property_value)
     except (ValueError,ArithmeticError,OverflowError) as exc:
@@ -100,6 +127,8 @@ def evaluate(snapshot, policy):
     signed_authorization=(snapshot.get('production_authorization') or {}).get('valid') is True
     if production and not signed_authorization:
         check('PRODUCTION_AUTHORIZATION_REQUIRED','UNRESOLVED','governance')
+    # Unresolved mandatory evidence or governance blocks automated production outcomes.
+    # Rejections are eligible only after governance authorization; never reject on guessed data.
     outcome=('REFER' if production and not signed_authorization else
              ('REJECT' if any(r['status']=='FAIL' for r in rules) else
               ('REFER' if any(r['status']=='UNRESOLVED' for r in rules) else 'APPROVE')))
@@ -108,7 +137,7 @@ def evaluate(snapshot, policy):
         score={"type":"ILLUSTRATIVE_RULE_BASED_RISK_BANDS","band":('HIGH' if fin['foir']>0.48 or fin['ltv']>0.85 else ('MODERATE' if fin['foir']>0.35 or fin['ltv']>0.65 else 'LOW')),
                "disclaimer":"Demonstration scorecard only; not a trained probability of default."}
     return {'outcome':outcome,'reasons':reasons,'rules':rules,'conflicts':conflicts,'financials':fin,
-            'alternative':offer,'stress':stresses,'risk':score,'policy_version':policy['version'],
+            'alternative':offer,'stress':stresses,'income_reconciliation':transaction_result,'risk':score,'policy_version':policy['version'],
             'engine_version':ENGINE_VERSION,'evidence_revision':app['revision'],
             'capability_mode':'CONTROLLED_LIVE_CANDIDATE' if production and signed_authorization else 'SIMULATED/LOCAL',
             'note':'Policy assessment only; no executed sanction or disbursement. Independent legal and lender approval is required.'}

@@ -19,6 +19,7 @@ class User(Base):
     org_id: Mapped[str] = mapped_column(ForeignKey('organizations.id'),index=True)
     username: Mapped[str] = mapped_column(String(100),unique=True,index=True)
     password_hash: Mapped[str] = mapped_column(String(250))
+    oidc_subject: Mapped[str|None] = mapped_column(String(200),nullable=True,unique=True,index=True)
     role: Mapped[str] = mapped_column(String(40))
     active: Mapped[bool] = mapped_column(Boolean,default=True)
 

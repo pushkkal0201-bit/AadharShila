@@ -6,13 +6,13 @@
 | Financial calculations | Locally implemented and unit tested | `finance.py`, numerical tests | Independent regulated math validation |
 | Rule engine and outcomes | Locally implemented and unit tested | `engine.py`, approved/refer/reject precedence tests | Lender-approved rules and scope of automated approval |
 | Evidence revision and replay | Locally implemented and tested | Frozen snapshots, before/after decision diff and historical tests | Evidence dependency DAG, long-term retention review |
-| Auth and role access | Locally implemented and tested in demo mode | Sessions, CSRF, borrower ownership tests | Enterprise SSO, MFA, fine-grained permissions and independent security review |
-| Document upload / text extraction | Locally implemented and tested | Bounded PDF/TXT, hash and text parsing, scoped downloads and integrity checks | OCR, signature validation, malware scanning, encrypted object storage |
+| Auth and role access | Locally implemented and tested in demo mode | Sessions, CSRF, borrower ownership tests | Browser SSO flow, IdP onboarding/revocation, OIDC key rotation, fine-grained permissions and independent security review |
+| Document upload / text extraction | Locally implemented and tested | Bounded PDF/TXT, hash and text parsing, scoped downloads and integrity checks | Production OCR/ClamAV services and isolation, cryptographic PDF signature validation, encrypted object storage |
 | Consent | Locally implemented and tested | Purpose-specific grant/revoke and enforcement test | Regulated notice, provider-specific authorization, retention and deletion |
-| Identity, bureau, AA, GST, registry, CERSAI, RERA, PEP | Implemented with synthetic fixture data only | `seed.py`, UI mode labels | Real contracts, permitted purpose, accredited providers, reliability controls |
+| Identity, bureau, AA, GST, registry, CERSAI, RERA, PEP | Implemented with synthetic fixture data only | `seed.py`, UI mode labels | Real contracts, permitted purpose, accredited providers and source-specific verification |
 | Credit-risk prediction | Demonstration rule scorecard only | `MODEL_CARD.md`, engine code | Licensed data, statistical training, validation, calibration and independent sign-off |
-| Regulatory controls | Primary sources researched, not legally encoded | `REGULATORY_SOURCES.md` | Clause-specific controls, applicability review, approval and independent audit |
-| Property assessment | Synthetic valuation evidence and documented legal/title gates | Decision rules and cases | Local registry coverage, legal opinions, accredited valuation |
+| Regulatory controls | Primary sources researched, not legally encoded | `REGULATORY_SOURCES.md` | Formal interpretation, lender-specific legal applicability, approved borrower disclosures and independent audit |
+| Property assessment | Synthetic valuation evidence and documented legal/title gates | Decision rules and cases | Authenticated registry responses, legal opinions, accredited valuation |
 | Alternative terms and stress | Locally implemented and tested | Financial functions and scenarios | Approved product scope, legal disclosures, acceptance workflow |
 | Policy versioning / governance | Locally implemented and integration tested | Distinct author/approver, simulate/activate lifecycle | Org-specific permissions, effective-date logic, change board |
 | Durable worker | Local queue/revision protection and fixture provider trace tested | `worker.py`, stale job tests | Multi-worker locking, dead-letter UX, production fault/load test |
@@ -41,15 +41,23 @@ See `docs/PROVIDER_ONBOARDING.md`, `docs/RISK_TRAINING.md`, `docs/SECURITY_REVIE
 
 The PostgreSQL Compose backup/restore job and Ubuntu test job completed successfully in [Actions run 42703365325](https://github.com/pushkkal0201-bit/AadharShila/actions/runs/42703365325). The initial Windows job detected a snapshot file-lock error; the relevant SQLite handles have been explicitly closed in a follow-up patch. The updated Windows result must be read from the next workflow execution before it can be declared passed. No cloud-region disaster recovery, encryption/key restore or approved regulatory control operation was exercised.
 
-## Institutional release controls (10 November 2026)
+## Current release-control extension (10 November 2026)
 
-- Six distinct Ed25519 signers are checked for signature, period, exact policy SHA-256 and organization/product scope. None is supplied with the code.
-- Live evidence requires an authenticated matching provider invocation. Labels alone fail closed.
-- Production SQLite is rejected. Real-data model evaluation requires declared twelve-month label maturity.
-- See [Institutional Go Live](INSTITUTIONAL_GO_LIVE.md) for licensing, legal and provider dependencies.
+- Six externally issued Ed25519 attestations can be checked for distinct trust anchors, organization, product, active policy hash, scope, effective period and signature integrity. **No attestation is supplied or self-certified with this repository.**
+- Production evidence now requires successful signed gateway invocation provenance linked to each evidence row; merely setting a `LIVE` string cannot satisfy the real decision engine.
+- Production SQLite is rejected; the test build retains local SQLite for development.
+- Real-data model evaluation refuses labels whose full 12-month observation window has not matured based on the dataset manifest.
+- See `docs/INSTITUTIONAL_GO_LIVE.md` for all externally controlled deployment prerequisites. No live lender approval, real bureau data, certified security assessment or real-mortgage validation was obtained in this chat.
 
-## Policy isolation hardening — 10 November 2026
+## 10 November 2026 follow-up: lender tenancy
 
-Policy ownership and version uniqueness are lender scoped. The API prevents cross-organization policy listing, simulation and activation, while the assessment constructor rejects a policy from another lender. A partial unique index enforces one ACTIVE policy per lender/product; the historical upgrade is fail-closed for ambiguous policy ownership.
+Policy data now has a lender organization foreign key; API reads and lifecycle operations are organization-scoped, and assessment construction verifies ownership. The Alembic upgrade backfills prior policies from their author/approver accounts and rejects ambiguous ownership. One ACTIVE policy per lender/product is enforced at the database layer. Signed gateway evidence now includes a stored payload digest. These safeguards have automated tests, but they are not an independent penetration test. See `GAP_ASSESSMENT_2026-11-10.md` for the current matrix and external dependencies.
 
-Signed partner responses must match their persisted evidence payload digest before being treated as live-authenticated. Logout requires session and CSRF validation. These are locally tested software controls, not a lender-approved credit policy or independent security audit. See [engineering gap assessment](GAP_ASSESSMENT_2026-11-10.md).
+## November 10: advanced workbench checkpoint
+
+- **Implemented and locally exercised:** `income.py` provides conservative categorized transaction accounting; verified samples can reduce accepted income but analysts cannot promote an exploratory preview to verified evidence. `property_intelligence.py` returns review-only comparables, never accepted title/collateral. `compliance_controls.py` emits evidence-presence diagnostics and expressly sets legal certification to false. `sanction.py` generates non-binding summaries with disbursement always blocked, and borrower previews redact staff-only screening signals.
+- **Configured dependency but not completed live operation:** `documents_pipeline.py` adds optional Tesseract/pdfium OCR and ClamAV scanning that fails closed for production uploads; `federated_auth.py` validates locally pinned OIDC token signing keys, audience, issuer, expiry and MFA indicators. The browser redirect/callback flow, IdP lifecycle, a real scanner service and cryptographic PDF signature validation are **not included**.
+- **Locally verified:** 90 automated tests, JavaScript syntax check, and Alembic head `f71a63c80927` on SQLite (latest local run). These are not independent security or legal certifications.
+- **Still blocked:** live licensed providers, independently validated mortgage outcomes, lender-owned credit policies, official KFS and binding sanction issuance, authorized disbursement, live production hosting and independent operational certification.
+
+Further detail: [`ENGINEERING_STAGE_2026-11-10.md`](ENGINEERING_STAGE_2026-11-10.md).
