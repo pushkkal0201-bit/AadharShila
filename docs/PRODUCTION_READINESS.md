@@ -61,3 +61,12 @@ Policy data now has a lender organization foreign key; API reads and lifecycle o
 - **Still blocked:** live licensed providers, independently validated mortgage outcomes, lender-owned credit policies, official KFS and binding sanction issuance, authorized disbursement, live production hosting and independent operational certification.
 
 Further detail: [`ENGINEERING_STAGE_2026-11-10.md`](ENGINEERING_STAGE_2026-11-10.md).
+
+
+## Encrypted local document storage — next-stage checkpoint
+
+- **Implemented, locally verifiable:** AES-256-GCM of newly uploaded PDF/TXT bytes when an institution-provided keyring is configured, key-ID metadata, cryptographic ownership binding, authenticated download and ciphertext checksum, v2 ciphertext-aware SQLite backup/restore, and production rejection of plaintext legacy documents.
+- **Fail-closed:** production uploads require a working malware scanner and a valid active encryption key; production document downloads refuse legacy unencrypted files. Sensitive parsed text and extracted financial fields are not written to the database in production by this stage.
+- **Not implemented/approved:** encrypted model/assessment database fields, centralized KMS/HSM, secure S3-compatible object storage, approved legacy plaintext re-encryption migration, key lifecycle operations, lifecycle retention/hold policies, real disaster recovery, independent security assessment and real lender authorization.
+
+See [`SECURE_DOCUMENT_STORAGE.md`](SECURE_DOCUMENT_STORAGE.md) for exact protection boundaries and deployment requirements.
