@@ -29,6 +29,11 @@ jobs:
         run: node --check web/app.js
       - name: Reproducible synthetic research check
         run: python -m aadharshila.synthetic_risk_benchmark --output-dir .risk-ci
+      - name: Register and verify synthetic research model without activation
+        shell: bash
+        run: |
+          python -m aadharshila.risk_registry add --artifact .risk-ci/research_model.json --registry .risk-ci/registry
+          python -c "import pathlib,subprocess,sys; r=pathlib.Path('.risk-ci/registry'); d=next(p for p in r.iterdir() if p.is_dir()); subprocess.run([sys.executable,'-m','aadharshila.risk_registry','verify','--entry',str(d)],check=True)"
 
   browser-e2e:
     runs-on: ubuntu-latest

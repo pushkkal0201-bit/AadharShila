@@ -67,11 +67,17 @@ def run():
                     page.get_by_text('UNSUPERVISED ML',exact=False).first.wait_for(state='visible',timeout=15000)
                     page.get_by_text('INCOME CONTRADICTION',exact=False).first.wait_for(state='visible',timeout=15000)
                     assert '820000' in page.locator('#intelligence-input').input_value()
+                    # The separate research lab stays inert until an operator pins a model.
+                    page.get_by_role('button',name='Risk model laboratory').first.click()
+                    page.get_by_role('heading',name='Mortgage model laboratory').wait_for(state='visible',timeout=15000)
+                    page.get_by_text('Enable the research demo:',exact=False).first.wait_for(state='visible',timeout=12000)
+                    page.get_by_role('button',name='Higher-stress example').click()
+                    assert page.locator('input[name=foir]').input_value()=='0.72'
                     assert not errors,'Browser JS failures: '+str(errors)
                     page.locator('#logout').click()
                     page.locator('#login:not(.hidden)').wait_for(timeout=8000)
                     return {'status':'PASS','real_browser':True,
-                            'scenarios':['login','overview','queue','decision','documents','advisory-ml-review','logout'],
+                            'scenarios':['login','overview','queue','decision','documents','advisory-ml-review','research-model-gate','logout'],
                             'javascript_errors':0}
                 finally:browser.close()
         finally:

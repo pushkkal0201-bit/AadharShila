@@ -1,6 +1,6 @@
 /* Aadharshila interface. All financial outcomes are retrieved from the API. */
 const state={user:null,apps:[],selected:null,detail:null,evidence:null,history:[],participants:[],reviews:[],policies:[],monitor:null,page:'overview',search:'',filter:'ALL'};
-const VIEWS=[['overview','Overview','◫'],['applications','Application queue','▤'],['new','New application','⊕'],['evidence','Evidence explorer','▥'],['financial','Financial assessment','₹'],['income','Income reconciliation','≍'],['intelligence','Evidence intelligence · ML','✧'],['property-review','Property review','⌂'],['sanction','Sanction readiness','✓'],['identity','KYC & fraud','♢'],['property','Property assessment','⌂'],['decision','Decision explanation','◎'],['requests','Evidence requests','✉'],['scenarios','Offers & stress tests','≋'],['documents','Document vault','▣'],['policy','Policy studio','⚖'],['simulation','Policy simulation','◈'],['audit','Audit timeline','◷'],['replay','Historical replay','↺'],['changes','Decision changes','⇄'],['monitoring','Monitoring','▦'],['connectors','Integrations','⌘'],['compliance','Regulatory sources','§']];
+const VIEWS=[['overview','Overview','◫'],['applications','Application queue','▤'],['new','New application','⊕'],['evidence','Evidence explorer','▥'],['financial','Financial assessment','₹'],['income','Income reconciliation','≍'],['intelligence','Evidence intelligence · ML','✧'],['risk-research','Risk model laboratory','◇'],['property-review','Property review','⌂'],['sanction','Sanction readiness','✓'],['identity','KYC & fraud','♢'],['property','Property assessment','⌂'],['decision','Decision explanation','◎'],['requests','Evidence requests','✉'],['scenarios','Offers & stress tests','≋'],['documents','Document vault','▣'],['policy','Policy studio','⚖'],['simulation','Policy simulation','◈'],['audit','Audit timeline','◷'],['replay','Historical replay','↺'],['changes','Decision changes','⇄'],['monitoring','Monitoring','▦'],['connectors','Integrations','⌘'],['compliance','Regulatory sources','§']];
 const $=(s)=>document.querySelector(s);
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=(n)=>n===null||n===undefined?'—':'₹'+Number(n).toLocaleString('en-IN',{maximumFractionDigits:0});
@@ -127,6 +127,45 @@ function showIntelligenceResults(r){
  <h3>ML anomaly observations</h3>${outliers||'<p class="muted">No months crossed the synthetic reference threshold.</p>'}
  <h3>Suggested reviewer actions</h3><ol>${(r.recommended_actions||[]).map(a=>`<li>${safe(a)}</li>`).join('')}</ol><div class="alert info">${safe(r.disclaimer)}</div></div>`;
 }
+const RISK_FIELDS=[['foir','Debt service / income',0.36],['ltv','Loan / property value',0.5],
+ ['monthly_surplus_ratio','Monthly surplus / income',0.55],['obligation_to_income_ratio','Existing obligations / income',0.1],
+ ['income_volatility','Income volatility ratio',0.2],['credit_utilization','Credit utilization ratio',0.25]];
+function renderRiskResearch(){
+ return header('Mortgage model laboratory','Calibrated logistic regression · 65/15/20 chronological evaluation · synthetic labels only')+
+ panel('Research model artifact','Versioned preprocessing, holdout measurements and SHA-256 integrity pin',
+ `<div class="panel-body"><div class="alert info"><b>Research sandbox, not underwriting.</b> The score predicts an invented synthetic label. It is not a validated probability of mortgage default and will never approve, reject, price, or refer a loan. No applicant is selected or modified.</div>
+ <div id="research-model-status">Checking the locally pinned research artifact…</div>
+ </div>`)+
+ panel('Try synthetic feature scenarios','Values are illustrative dimensionless ratios; no borrower records or lender outcomes',
+ `<form id="risk-research-form" class="panel-body">
+ <div class="form-grid">${RISK_FIELDS.map(([key,label,defaultValue])=>`<label class="field">${esc(label)}<input name="${key}" type="number" min="0" max="5" step="0.01" value="${defaultValue}" required></label>`).join('')}</div>
+ <div class="inline-actions"><button class="button small" type="button" data-action="risk-low">Lower-stress example</button><button class="button small" type="button" data-action="risk-high">Higher-stress example</button></div>
+ <label class="field"><span class="small-text">I acknowledge these are <b>synthetic demonstration inputs</b>, not real borrower data.</span><input name="synthetic_acknowledged" type="checkbox" required></label>
+ <div class="form-footer"><button class="button primary" type="submit" ${!isStaff()?'disabled':''}>Run research prediction →</button></div></form>`)+
+ panel('Research output','Calibrated synthetic-label score, additive log-odds contributions and reference-range warnings',
+ '<div class="panel-body" id="risk-research-results"><div class="empty">Load a pinned artifact, choose synthetic values and run the preview.</div></div>');
+}
+async function fillRiskResearchStatus(){
+ const node=$('#research-model-status');if(!node)return;
+ try{const r=await api('/research/risk-model/status');
+ if(!node)return;
+ if(r.status!=='SYNTHETIC_RESEARCH_READY'){
+  node.innerHTML=`<p class="muted small-text">${safe(r.reason||'No trusted model configured.')}</p><div class="alert"><b>Enable the research demo:</b> stop your normal server, then run <code>ml_demo.bat</code> from the repository directory on Windows. This installs optional ML dependencies and generates an artificial training set. See docs/hackathon/FULL_ML_PIPELINE.md.</div>`;
+  return;
+ }
+ node.innerHTML=keyvals([['Model',safe(r.model_family)],['Research reference',badge('SYNTHETIC')],['Holdout ROC AUC (invented labels)',safe(r.holdout_test.roc_auc)],['Holdout Brier score',safe(r.holdout_test.brier_score)],['Constant baseline Brier',safe(r.holdout_constant_prevalence_baseline.brier_score)],['SHA-256',`<span class="mono">${safe(r.artifact_sha256.slice(0,18))}…</span>`],['Used for loan decisions',badge('NEVER')]]).replace('class="panel-body"','')+
+ '<p class="footnote">Training observations, labels and metrics are artificial. ROC AUC or Brier values cannot establish clinical, lending or financial performance on real borrowers.</p>';
+ }catch(e){if(node)node.innerHTML=`<div class="alert critical">${safe(e.message)}</div>`}
+}
+function showRiskResearchResults(r){
+ const node=$('#risk-research-results');if(!node)return;
+ const max=Math.max(0.00001,...r.contributions.map(v=>Math.abs(v.log_odds_contribution)));
+ const contributions=r.contributions.map(x=>`<div class="intel-bar-row"><span class="small-text">${safe(x.feature.replaceAll('_',' '))}</span><div class="intel-track"><span class="intel-fill ${x.log_odds_contribution<0?'research-negative':'research-positive'}" style="width:${(Math.abs(x.log_odds_contribution)/max*100).toFixed(1)}%"></span></div><b class="mono">${x.log_odds_contribution>=0?'+':''}${safe(x.log_odds_contribution)}</b></div>`).join('');
+ node.innerHTML=`<div class="cards">${metaCard('Synthetic-label model output',(100*r.research_score).toFixed(1)+'%','NOT a real mortgage PD')}${metaCard('Before calibration',(100*r.uncalibrated_score).toFixed(1)+'%','Research reference only')}${metaCard('Outside training reference',String(r.distribution_warnings.length),'Percentile-range review flags')}${metaCard('Loan decision effect',badge('NONE'),'No application is evaluated')}</div>
+ <h3>Feature contributions to model log-odds</h3><div class="intel-bars">${contributions}</div><p class="footnote">Additive associations in a logistic model; these are not causal explanations. Negative values lower its synthetic-label log-odds.</p>
+ <h3>Input distribution checks</h3>${r.distribution_warnings.length?r.distribution_warnings.map(w=>`<div class="intel-signal"><b>${safe(w.feature)}</b><p>Outside training 1st–99th percentile: ${safe(w.reference_range.join(' to '))}.</p></div>`).join(''):'<p class="muted">All submitted values are within the training reference 1st–99th percentile range.</p>'}
+ <div class="alert info">${safe(r.disclaimer)}</div>`;
+}
 function renderPropertyReview(){return header('Property intelligence','Comparable prices cannot establish ownership or legal title.')+caseBanner()+
  panel('Independent review input','This preview does not write verified property evidence.',`<form id="property-form" class="panel-body"><div class="form-grid"><label class="field">Area (m²)<input type="number" name="area_sqm" min="11" step="0.1" value="100" required></label><label class="field">Declared value (INR)<input type="number" name="declared_value_inr" min="1" value="5000000" required></label></div><label class="field">Comparable sales (JSON array)<textarea name="comparables" rows="6" placeholder='[{"sale_reference":"REGISTERED-REF","area_sqm":100,"sale_price_inr":5000000,"distance_km":2,"months_ago":6,"issuer_verified":false}]'></textarea></label><p class="footnote">Registry, CERSAI, RERA, legal opinion and independent valuation gates remain unresolved until supported by authorized evidence.</p><button class="button primary" type="submit" ${!isStaff()?'disabled':''}>Assess indicative comparables</button></form>`)+
  '<section class="panel"><div class="panel-head"><h2>Property review</h2></div><div class="panel-body" id="property-results">Submit comparable evidence to inspect coverage.</div></section>';
@@ -165,8 +204,8 @@ function renderMonitoring(){return header('System monitoring','Real persisted co
 function renderCompliance(){return header('Regulatory source register','Official RBI sources with clear boundaries: references pending clause-level validation.')+`<div id="compliance-content"><div class="empty">Loading sources…</div></div>`}
 function renderConnectors(){return header('Integration matrix','Local fixture adapters demonstrate contract handling. All external provider connectivity is outstanding.')+`<div id="connector-content"><div class="empty">Loading integration matrix…</div></div>`;
 }
-const RENDER={overview:renderOverview,applications:renderQueue,new:renderNew,evidence:renderEvidence,financial:renderFinancial,identity:renderIdentity,property:renderProperty,decision:renderDecision,requests:renderRequests,scenarios:renderScenarios,income:renderIncome,intelligence:renderIntelligence,'property-review':renderPropertyReview,sanction:renderSanction,documents:renderDocuments,policy:renderPolicy,simulation:renderSimulation,audit:renderAudit,replay:renderReplay,changes:renderChanges,monitoring:renderMonitoring,connectors:renderConnectors,compliance:renderCompliance};
-async function render(){nav();$('#content').innerHTML=RENDER[state.page]();if(state.page==='intelligence')fillIntelligenceDemo();if(state.page==='audit')fillAudit();if(state.page==='changes')fillChanges();if(state.page==='requests')fillNextEvidence();if(state.page==='documents')fillDocuments();if(state.page==='sanction')fillSanction();if(state.page==='monitoring')fillMonitoring();if(state.page==='connectors')fillConnectors();if(state.page==='compliance')fillCompliance();}
+const RENDER={overview:renderOverview,applications:renderQueue,new:renderNew,evidence:renderEvidence,financial:renderFinancial,identity:renderIdentity,property:renderProperty,decision:renderDecision,requests:renderRequests,scenarios:renderScenarios,income:renderIncome,intelligence:renderIntelligence,'risk-research':renderRiskResearch,'property-review':renderPropertyReview,sanction:renderSanction,documents:renderDocuments,policy:renderPolicy,simulation:renderSimulation,audit:renderAudit,replay:renderReplay,changes:renderChanges,monitoring:renderMonitoring,connectors:renderConnectors,compliance:renderCompliance};
+async function render(){nav();$('#content').innerHTML=RENDER[state.page]();if(state.page==='intelligence')fillIntelligenceDemo();if(state.page==='risk-research')fillRiskResearchStatus();if(state.page==='audit')fillAudit();if(state.page==='changes')fillChanges();if(state.page==='requests')fillNextEvidence();if(state.page==='documents')fillDocuments();if(state.page==='sanction')fillSanction();if(state.page==='monitoring')fillMonitoring();if(state.page==='connectors')fillConnectors();if(state.page==='compliance')fillCompliance();}
 async function fillChanges(){if(!state.selected)return;const target=$('#change-results');if(!target)return;
  try{const diff=await api('/applications/'+state.selected+'/assessment-diff');
  target.innerHTML=keyvals([['Older revision',diff.older.revision],['Previous outcome',badge(diff.older.outcome)],['New revision',diff.newer.revision],['Current outcome',badge(diff.newer.outcome)],['Outcome changed',badge(diff.outcome_changed?'YES':'NO')]])+
@@ -195,6 +234,12 @@ document.addEventListener('click',async e=>{
  const action=e.target.closest('[data-action]');if(action){try{
    if(action.dataset.action.startsWith('consent-')){const granted=action.dataset.action==='consent-grant';await api('/applications/'+state.selected+'/consents',{method:'POST',body:JSON.stringify({purpose:'financial_underwriting',granted,provider:'borrower',categories:['financial','credit']})});await reload();await render();toast(granted?'Consent recorded.':'Consent revoked.')}
    if(action.dataset.action==='intel-demo'){await fillIntelligenceDemo();toast('Synthetic transaction sample loaded.')}
+   if(['risk-low','risk-high'].includes(action.dataset.action)){
+      const form=$('#risk-research-form');if(!form)return;
+      const high=action.dataset.action==='risk-high';
+      const presets=high?{foir:.72,ltv:.92,monthly_surplus_ratio:.12,obligation_to_income_ratio:.43,income_volatility:.48,credit_utilization:.87}:{foir:.21,ltv:.34,monthly_surplus_ratio:.71,obligation_to_income_ratio:.06,income_volatility:.07,credit_utilization:.12};
+      Object.entries(presets).forEach(([k,v])=>{form.elements.namedItem(k).value=v});toast('Synthetic feature scenario selected.');
+   }
    if(action.dataset.action==='submit-app'){await api('/applications/'+state.selected+'/submit',{method:'POST'});await reload();await go('decision');toast('Application submitted and assessed.')}
    if(action.dataset.action==='simulate'){let id=$('#simulate-choose').value;let v=await api('/policies/'+id+'/simulate',{method:'POST'});$('#simulation-results').innerHTML=panel('Simulation results',v.evaluated+' persisted synthetic assessments evaluated',`<div class="panel-body"><div class="cards" style="grid-template-columns:repeat(3,1fr)">${metaCard('Simulated approvals',v.simulated_counts.APPROVE,'Previously '+v.original_counts.APPROVE)}${metaCard('Simulated referrals',v.simulated_counts.REFER,'Previously '+v.original_counts.REFER)}${metaCard('Simulated rejections',v.simulated_counts.REJECT,'Previously '+v.original_counts.REJECT)}</div><h3>Changed outcomes</h3>${v.changes.map(x=>`<div class="keyval"><span>${safe(x.reference)}</span><b>${badge(x.old)} → ${badge(x.new)}</b></div>`).join('')||'<p class="muted small-text">No current outcome changes under this version.</p>'}</div>`);toast('Policy simulation complete.')}
  }catch(err){toast(err.message,true)}return}
@@ -223,6 +268,12 @@ document.addEventListener('submit',async e=>{
   let body=JSON.parse(new FormData(form).get('batch'));
   const r=await api('/applications/'+state.selected+'/income-reconciliation',{method:'POST',body:JSON.stringify(body)});
   $('#income-results').innerHTML=keyvals([['Reconciliation status',badge(r.status)],['Accepted monthly income (preview only)',money(r.accepted_monthly_income)],['Observed obligations',money(r.observed_monthly_obligations)],['Verified rows',r.verified_records],['Excluded unverified rows',r.unverified_records]])+`<p class="footnote">${esc(r.findings.join(', ')||'No additional flags')} · Does not update an underwriting decision.</p>`;
+ }
+ if(form.id==='risk-research-form'){
+   const formData=new FormData(form);
+   const fields=Object.fromEntries(RISK_FIELDS.map(([key])=>[key,Number(formData.get(key))]));
+   const r=await api('/research/risk-model/preview',{method:'POST',body:JSON.stringify({features:fields,synthetic_acknowledged:formData.get('synthetic_acknowledged')==='on'})});
+   showRiskResearchResults(r);toast('Research scenario evaluated. No loan decision changed.');
  }
  if(form.id==='intelligence-form'){
   if(!state.selected)throw new Error('Select an application first.');
