@@ -1,0 +1,21 @@
+{
+  "dataset_id": "REPLACE_WITH_APPROVED_EXTERNAL_COHORT_IDENTIFIER",
+  "source": "REPLACE_WITH_AUTHORIZED_LOAN_PERFORMANCE_EXTRACT_DESCRIPTION",
+  "license": "REPLACE_WITH_ACTUAL_DATA_LICENSE_OR_CONTRACT_REFERENCE",
+  "permission": "REPLACE_WITH_APPROVED_RESEARCH_PURPOSE_AND_DATA_OWNER_SIGNOFF",
+  "label_definition": "REPLACE_WITH_FORMAL_12_MONTH_LOAN_PERFORMANCE_OUTCOME_DEFINITION",
+  "horizon_months": 12,
+  "features": [
+    "foir",
+    "ltv",
+    "monthly_surplus_ratio",
+    "obligation_to_income_ratio",
+    "income_volatility",
+    "credit_utilization"
+  ],
+  "synthetic": false,
+  "independent_of_training_declared": true,
+  "decision_date_column": "decision_date",
+  "borrower_id_column": "borrower_id",
+  "observation_end_date": "REPLACE_WITH_ACTUAL_YYYY-MM-DD"
+}
