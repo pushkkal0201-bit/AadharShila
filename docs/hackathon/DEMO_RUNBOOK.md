@@ -42,6 +42,12 @@ cd /d D:\Projects\AadharShila
 
 The script creates an artificial six-month transaction batch, compares `₹100,000` bank-income to `₹55,000` supporting income, runs a seeded Isolation Forest against a fixed artificial reference, and prints an advisory JSON result. It does not load user data, call a provider, change a database, or produce an approval.
 
+## Optional additional research demonstration (1–2 minutes)
+
+For a separate model-lifecycle demonstration, stop the existing server and run `ml_demo.bat`. Open **Risk model laboratory** and show the synthetic chronological holdout, baseline comparison, low- and high-stress input presets, feature log-odds contributions, and training-reference warnings. This score measures **invented labels** and is never an actual probability of mortgage default or an input to the loan decision. If you have only six minutes, prioritize the evidence contradiction/replay flow above.
+
+See [`FULL_ML_PIPELINE.md`](FULL_ML_PIPELINE.md).
+
 ## Recording and delivery
 
 Record an actual screen capture locally using the installed application, not a generated mockup. Include the menu labels, `SYNTHETIC DATA` banner, ML model-reference disclaimer, and historical replay. Create a short backup recording of the live walk-through. **No video is bundled or claimed to be recorded by this repository.**

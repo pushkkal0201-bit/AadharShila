@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from datetime import datetime,timezone,timedelta
 from decimal import Decimal
+from typing import Literal
 from fastapi import FastAPI, HTTPException, Depends, Request, Response, UploadFile, File, Header
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,6 +28,8 @@ from .secure_documents import (encrypt_document, decrypt_document, storage_filen
 from .sanction import preview as sanction_preview
 from .property_intelligence import PropertyReview, evaluate_property
 from .risk_monitor import population_stability_index
+from .risk_serving import (model_status as research_model_status, preview as research_model_preview,
+                           research_drift, ResearchModelUnavailable)
 from .compliance_controls import check_application, CONTROL_REGISTRY
 from .browser_sso import begin as start_browser_sso, consume_flow, exchange_authorization_code, new_opaque_session, BrowserSSOError
 from .observability import record as record_http, prometheus, snapshot as request_metrics
@@ -724,6 +727,42 @@ def feature_drift(body:DriftRequest,user:User=Depends(current_user)):
     require(user,{'ANALYST','COMPLIANCE','AUDITOR','ADMIN'})
     try:return population_stability_index(body.reference_counts,body.current_counts)
     except ValueError as exc:raise HTTPException(422,str(exc))
+
+class ResearchRiskPreviewRequest(BaseModel):
+    features:dict[str,float]=Field(min_length=6,max_length=6)
+    synthetic_acknowledged:Literal[True]
+
+class ResearchRiskDriftRequest(BaseModel):
+    rows:list[dict[str,float]]=Field(min_length=100,max_length=2000)
+    synthetic_acknowledged:Literal[True]
+
+@app.get('/api/v1/research/risk-model/status')
+def risk_model_research_status(user:User=Depends(current_user)):
+    require(user,{'ANALYST','COMPLIANCE','AUDITOR','ADMIN'})
+    if os.getenv('APP_ENV','development')=='production':
+        raise HTTPException(404,'Research model preview is unavailable')
+    try:return research_model_status()
+    except ResearchModelUnavailable as exc:
+        return {'status':'NOT_READY', 'reason':str(exc), 'model_activated':False,
+                'training_reference':'SYNTHETIC_ONLY', 'documentation':'docs/hackathon/FULL_ML_PIPELINE.md'}
+
+@app.post('/api/v1/research/risk-model/preview')
+def risk_model_research_preview(body:ResearchRiskPreviewRequest,user:User=Depends(current_user)):
+    require(user,{'ANALYST','COMPLIANCE','ADMIN'})
+    if os.getenv('APP_ENV','development')=='production':
+        raise HTTPException(404,'Research model preview is unavailable')
+    try:return research_model_preview(body.features)
+    except ResearchModelUnavailable as exc:raise HTTPException(503,str(exc))
+    except (ValueError,TypeError) as exc:raise HTTPException(422,str(exc))
+
+@app.post('/api/v1/research/risk-model/drift')
+def risk_model_research_drift(body:ResearchRiskDriftRequest,user:User=Depends(current_user)):
+    require(user,{'ANALYST','COMPLIANCE','AUDITOR','ADMIN'})
+    if os.getenv('APP_ENV','development')=='production':
+        raise HTTPException(404,'Research model preview is unavailable')
+    try:return research_drift(body.rows)
+    except ResearchModelUnavailable as exc:raise HTTPException(503,str(exc))
+    except (ValueError,TypeError) as exc:raise HTTPException(422,str(exc))
 
 @app.get('/api/v1/applications/{id}/sanction-preview')
 def get_sanction_preview(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):

@@ -10,7 +10,7 @@ Aadharshila evaluates mortgage applications against consent-bound evidence, fina
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](docker-compose.yml)
 [![Demo](https://img.shields.io/badge/Data-Synthetic%20only-6B7280)](data/MANIFEST.md)
 
-**[AI evidence review](#ai-assisted-evidence-review--live-hackathon-feature)** · **[Problem](#the-problem)** · **[Users](#who-uses-it-and-when)** · **[Live walkthrough](#six-minute-judge-walkthrough)** · **[Design](#what-makes-the-implementation-different)** · **[Workflow](#underwriting-workflow)** · **[Architecture](#system-architecture)** · **[Tech stack](#technology-stack)** · **[Run locally](#installation-and-local-setup)** · **[API](#api-usage)** · **[Verification](#testing-and-verification)** · **[Security](#security-trust-boundaries-and-production-scope)**
+**[AI evidence review](#ai-assisted-evidence-review--live-hackathon-feature)** · **[ML risk laboratory](#full-ml-risk-model-laboratory--synthetic-research)** · **[Problem](#the-problem)** · **[Users](#who-uses-it-and-when)** · **[Live walkthrough](#six-minute-judge-walkthrough)** · **[Design](#what-makes-the-implementation-different)** · **[Workflow](#underwriting-workflow)** · **[Architecture](#system-architecture)** · **[Tech stack](#technology-stack)** · **[Run locally](#installation-and-local-setup)** · **[API](#api-usage)** · **[Verification](#testing-and-verification)** · **[Security](#security-trust-boundaries-and-production-scope)**
 
 > [!IMPORTANT]
 > **Local engineering demonstration, not a lending service.** The borrowers, financial records, provider assertions, and credit policies in this repository are synthetic or illustrative. `APPROVE`, `REFER`, and `REJECT` describe **demonstration underwriting decisions**. No live KYC, credit bureau, Account Aggregator, property-registry, lender-sanction, or disbursement service is connected. The offline ML research model is not used to approve loans.
@@ -516,12 +516,12 @@ The production-facing credit outcome in this repository is **rule-based**. The r
 | Deterministic underwriting | EMI, FOIR, LTV, evidence/consent gates, contradictions, reason codes | **Used in local assessments** |
 | Document intelligence | PDF text extraction, optional OCR, scanner hook, field/evidence review | **Partly operational; issuer validation external** |
 | Transaction intelligence | Source-aware normalization, duplicates/reversals, volatility, coverage | **Local workflow; live bank input external** |
-| Credit-risk model training | Interpretable logistic regression, chronological 65/15/20 train/validation/holdout, output metrics | **Offline research only** |
+| Credit-risk model training | Interpretable logistic regression, validation-only Platt calibration, untouched chronological holdout, JSON artifact registry and research preview | **Synthetic research; excluded from credit decisions** |
 | Synthetic evaluation | Fixed-seed invented borrowers and default outcomes, manifest and holdout test | **Engineering validation, not lending accuracy** |
-| Drift monitoring | Population Stability Index (PSI) on supplied frequency bands | **Research diagnostics only** |
+| Drift monitoring | Population Stability Index (PSI) on training/reference bins and bounded synthetic preview inputs | **Research diagnostics only** |
 | Production model authorization | Real outcomes, lawful data rights, independent validation, fairness analysis and lender sign-off | **Not completed** |
 
-An earlier fixed-seed research run generated **640 invented observations** with **128 holdout records** and synthetic holdout ROC AUC **0.685803**. That number evaluates the generator/test pipeline, **not the probability that a real applicant will default**. No trained artifact from this experiment is connected to `engine.evaluate`.
+A fixed-seed research run generated **640 invented observations** with **128 holdout records** and synthetic holdout ROC AUC **0.685803**. That number evaluates the generator/test pipeline, **not the probability that a real applicant will default**. No trained artifact from this experiment is connected to `engine.evaluate`.
 
 <details>
 <summary><strong>Reproduce the synthetic experiment</strong></summary>
@@ -536,6 +536,35 @@ Output includes `status: "SYNTHETIC_TEST_ONLY"`, `model_activated: false`, holdo
 
 </details>
 
+## Full ML risk-model laboratory — synthetic research
+
+A separate **Risk model laboratory** is now integrated into the analyst interface. It is a complete research workflow, deliberately separate from decisioning: train an interpretable logistic classifier, calibrate it on a later validation period, compare it against a constant-prevalence baseline on an untouched temporal holdout, register the JSON candidate under its content hash, and use its pinned artifact for **explicitly synthetic** predictions. The UI shows additive log-odds contributions and training-reference distribution warnings. Staff can also request descriptive feature PSI drift diagnostics via an isolated API.
+
+```mermaid
+flowchart LR
+    A[Synthetic labeled records] --> B[Historical train 65 percent]
+    B --> C[Logistic regression]
+    C --> D[Later calibration 15 percent]
+    D --> E[Newest holdout 20 percent]
+    E --> F[Metrics and immutable research artifact]
+    F --> G[Digest-pinned synthetic research preview]
+    G --> H[Explainable contributions and drift warnings]
+    H --> I[Human research review, no loan decision effect]
+```
+
+**Windows quickstart (existing installation, stop any running `run.bat` first):**
+
+```bat
+cd /d D:\Projects\AadharShila
+git pull --ff-only origin main
+setup.bat
+ml_demo.bat
+```
+
+Visit `http://127.0.0.1:8000`, choose **Credit analyst → Risk model laboratory**, inspect the fixed-seed holdout report, select a synthetic feature preset and run the preview. No borrower data is loaded. For other platforms or manual API use, see the [complete training, calibration, registry, inference, monitoring and safety guide](docs/hackathon/FULL_ML_PIPELINE.md).
+
+**Validation boundary:** A generated model score describes an artificial label. It is neither a real probability of mortgage default nor an underwriting recommendation. Actual assessments continue to use the versioned deterministic evidence-and-policy engine. Model preview and drift endpoints are unavailable in production mode.
+
 ## Technology stack
 
 | Layer | Technology | Responsibility |
@@ -547,7 +576,7 @@ Output includes `status: "SYNTHETIC_TEST_ONLY"`, `model_activated: false`, holdo
 | Document handling | `pypdf`, optional PDFium/Tesseract, ClamAV contract, `cryptography` | PDF/TXT intake, parsing, malware-scan integration, AES-256-GCM storage |
 | Identity | Local development sessions, PyJWT, OIDC code + PKCE | Role checks, signed federated identity and revocable browser sessions |
 | External source interface | HTTPX, HMAC-signed gateway response verification | Opt-in provider transport and provenance checks; fixtures in demo |
-| Model research | scikit-learn, offline CSV + JSON manifest | Logistic regression, temporal evaluation, calibration and drift metrics |
+| Model research | scikit-learn, pandas, NumPy, JSON artifacts | Logistic regression, validation-only calibration, holdout evaluation, lineage registry, isolated preview and PSI drift |
 | Background processing | Database-backed Python worker | Revision-aware queued reassessments |
 | Testing | pytest, HTTPX/TestClient, Playwright/Chromium, benchmark scripts | Logic, API, access, browser smoke, HTTP load and recovery tests |
 | Delivery | Docker Compose, GitHub Actions | Local PostgreSQL + worker, Windows/Ubuntu tests, browser and restore CI |

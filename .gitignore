@@ -20,3 +20,5 @@ secrets/
 .risk-ci/
 playwright-report/
 test-results/
+# Locally generated research data, model artifacts and registry candidates
+model_artifacts/

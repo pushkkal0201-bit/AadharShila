@@ -11,3 +11,8 @@
 .intel-signal small{color:#62756c;display:block;font-size:.73rem;margin-top:3px}
 .intel-signal p{margin:7px 0 0;font-size:.85rem;line-height:1.55}
 @media(max-width:640px){.intel-bar-row{grid-template-columns:70px minmax(60px,1fr) 95px;gap:8px;font-size:.72rem}}
+/* Research model laboratory: contributions describe synthetic-label log odds. */
+.intel-fill.research-negative { background: #63877b; }
+.intel-fill.research-positive { background: #b27a56; }
+#risk-research-form input[type="checkbox"] { width: auto; min-width: 18px; height: 18px; vertical-align: middle; margin-left: 10px; }
+#risk-research-results .intel-bar-row > span { min-width: 170px; }
