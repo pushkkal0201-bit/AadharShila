@@ -10,7 +10,7 @@ Aadharshila evaluates mortgage applications against consent-bound evidence, fina
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](docker-compose.yml)
 [![Demo](https://img.shields.io/badge/Data-Synthetic%20only-6B7280)](data/MANIFEST.md)
 
-**[Problem](#the-problem)** · **[Users](#who-uses-it-and-when)** · **[Live walkthrough](#six-minute-judge-walkthrough)** · **[Design](#what-makes-the-implementation-different)** · **[Workflow](#underwriting-workflow)** · **[Architecture](#system-architecture)** · **[Tech stack](#technology-stack)** · **[Run locally](#installation-and-local-setup)** · **[API](#api-usage)** · **[Verification](#testing-and-verification)** · **[Security](#security-trust-boundaries-and-production-scope)**
+**[AI evidence review](#ai-assisted-evidence-review--live-hackathon-feature)** · **[Problem](#the-problem)** · **[Users](#who-uses-it-and-when)** · **[Live walkthrough](#six-minute-judge-walkthrough)** · **[Design](#what-makes-the-implementation-different)** · **[Workflow](#underwriting-workflow)** · **[Architecture](#system-architecture)** · **[Tech stack](#technology-stack)** · **[Run locally](#installation-and-local-setup)** · **[API](#api-usage)** · **[Verification](#testing-and-verification)** · **[Security](#security-trust-boundaries-and-production-scope)**
 
 > [!IMPORTANT]
 > **Local engineering demonstration, not a lending service.** The borrowers, financial records, provider assertions, and credit policies in this repository are synthetic or illustrative. `APPROVE`, `REFER`, and `REJECT` describe **demonstration underwriting decisions**. No live KYC, credit bureau, Account Aggregator, property-registry, lender-sanction, or disbursement service is connected. The offline ML research model is not used to approve loans.
@@ -477,6 +477,35 @@ Related code: [`main.py`](src/aadharshila/main.py), [`models.py`](src/aadharshil
 </details>
 
 **Illustrative policy API:** `POST /api/v1/policies`, `POST /api/v1/policies/{id}/validate`, `POST /api/v1/policies/{id}/simulate`, `POST /api/v1/policies/{id}/approve`, and `POST /api/v1/policies/{id}/activate`. Lender legal and credit committee approval are **external requirements**; internal role separation does not replace them.
+
+## AI-assisted evidence review — live hackathon feature
+
+The **Evidence intelligence · ML** screen runs a real unsupervised `IsolationForest` on a six-month synthetic transaction sample. It ranks unusual monthly receipt patterns and keeps source-document contradictions visible next to its model output. The detector's reference observations are **generated synthetic data**, not historical mortgage behavior, so its output is not a fraud probability or credit score.
+
+```mermaid
+flowchart LR
+    A[Analyst-entered synthetic transactions] --> B[Conservative receipt normalization]
+    B --> C[Six monthly totals]
+    C --> D[Isolation Forest with fixed artificial reference]
+    D --> E[Rank unusual receipt months]
+    F[Stored bank and income support evidence] --> G[Policy-tolerance comparison]
+    E --> H[Human evidence review]
+    G --> H
+    H -. Advisory only .-> I[Existing deterministic underwriting gates]
+```
+
+For the preloaded `AS-1004` judge example, the AI review highlights one ₹820,000 synthetic receipt against a recurring ₹100,000/month pattern, excludes ₹240,000 of loan proceeds, flags a repeated income reference, and displays the persisted income-support discrepancy. Nothing in this analysis changes verification status, accepted income or the saved `REFER` decision.
+
+1. Run `setup.bat` and `run.bat`. Select **Credit analyst** and open case **AS-1004**.
+2. Open **Evidence intelligence · ML**, select **Load synthetic sample** and **Run evidence analysis**.
+3. Inspect the six-month chart, flagged month, deterministic reason codes and model provenance. Then visit **Decision explanation** and **Historical replay**.
+
+**Judge materials:** [Six-minute walkthrough](docs/hackathon/DEMO_RUNBOOK.md) · [Model and safety card](docs/hackathon/AI_EVIDENCE_REVIEW.md) · [Reproducible CLI](scripts/hackathon_demo.py).
+
+```bash
+python scripts/hackathon_demo.py
+python -m pytest tests/test_evidence_intelligence.py -q
+```
 
 ## AI/ML research: implemented versus deployed
 

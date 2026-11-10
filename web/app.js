@@ -1,6 +1,6 @@
 /* Aadharshila interface. All financial outcomes are retrieved from the API. */
 const state={user:null,apps:[],selected:null,detail:null,evidence:null,history:[],participants:[],reviews:[],policies:[],monitor:null,page:'overview',search:'',filter:'ALL'};
-const VIEWS=[['overview','Overview','◫'],['applications','Application queue','▤'],['new','New application','⊕'],['evidence','Evidence explorer','▥'],['financial','Financial assessment','₹'],['income','Income reconciliation','≍'],['property-review','Property review','⌂'],['sanction','Sanction readiness','✓'],['identity','KYC & fraud','♢'],['property','Property assessment','⌂'],['decision','Decision explanation','◎'],['requests','Evidence requests','✉'],['scenarios','Offers & stress tests','≋'],['documents','Document vault','▣'],['policy','Policy studio','⚖'],['simulation','Policy simulation','◈'],['audit','Audit timeline','◷'],['replay','Historical replay','↺'],['changes','Decision changes','⇄'],['monitoring','Monitoring','▦'],['connectors','Integrations','⌘'],['compliance','Regulatory sources','§']];
+const VIEWS=[['overview','Overview','◫'],['applications','Application queue','▤'],['new','New application','⊕'],['evidence','Evidence explorer','▥'],['financial','Financial assessment','₹'],['income','Income reconciliation','≍'],['intelligence','Evidence intelligence · ML','✧'],['property-review','Property review','⌂'],['sanction','Sanction readiness','✓'],['identity','KYC & fraud','♢'],['property','Property assessment','⌂'],['decision','Decision explanation','◎'],['requests','Evidence requests','✉'],['scenarios','Offers & stress tests','≋'],['documents','Document vault','▣'],['policy','Policy studio','⚖'],['simulation','Policy simulation','◈'],['audit','Audit timeline','◷'],['replay','Historical replay','↺'],['changes','Decision changes','⇄'],['monitoring','Monitoring','▦'],['connectors','Integrations','⌘'],['compliance','Regulatory sources','§']];
 const $=(s)=>document.querySelector(s);
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=(n)=>n===null||n===undefined?'—':'₹'+Number(n).toLocaleString('en-IN',{maximumFractionDigits:0});
@@ -96,6 +96,37 @@ function renderIncome(){return header('Income reconciliation','Verified-source t
  panel('Source transaction preview','Paste normalized transaction JSON from an independently authorized source.',`<form id="income-form" class="panel-body"><label class="field">Transaction batch JSON<textarea name="batch" rows="12" placeholder='{"applicant_type":"SALARIED","as_of":"2026-11-10","transactions":[...]}' required></textarea></label><p class="footnote">Only independently verified rows count. Own transfers, loan proceeds and uncertain credits are excluded. This preview cannot grant credit approval.</p><button class="button primary" type="submit" ${!isStaff()?'disabled':''}>Calculate reconciliation</button></form>`)+
  '<section class="panel"><div class="panel-head"><h2>Reconciliation findings</h2></div><div class="panel-body" id="income-results">Submit a structured transaction batch to review.</div></section>';
 }
+function renderIntelligence(){
+ return header('Evidence intelligence','Explainable anomaly triage for synthetic statement transactions. Model findings never change the loan decision.')+caseBanner()+
+ panel('Review synthetic bank activity','Isolation Forest · fixed synthetic reference · no live account access',
+ `<div class="panel-body"><div class="alert info"><b>Advisory only.</b> Model outlier margins are not probabilities of fraud or default. This analysis does not verify transactions or alter accepted income, evidence, or policy decisions.</div>
+ <div class="inline-actions"><button type="button" class="button small" id="intel-demo" data-action="intel-demo" ${!isStaff()?'disabled':''}>Load synthetic sample ↻</button><span class="muted small-text">Sample includes six monthly receipts, one outlier, a loan credit, and a duplicate entry.</span></div>
+ <form id="intelligence-form"><label class="field">Transaction batch (structured JSON)<textarea id="intelligence-input" name="batch" rows="12" spellcheck="false" placeholder="Select Load synthetic sample to get started" required></textarea></label>
+ <div class="form-footer"><button class="button primary" type="submit" ${!isStaff()?'disabled':''}>Run evidence analysis →</button></div></form></div>`)+
+ panel('Model and evidence findings','Read-only prioritization with traceable, human-readable signals',
+ '<div id="intelligence-results" class="panel-body"><div class="empty">Load a sample and run analysis to inspect what merits review.</div></div>');
+}
+async function fillIntelligenceDemo(){
+ if(!state.selected||!isStaff())return;
+ const input=$('#intelligence-input');if(!input)return;
+ try{const result=await api('/applications/'+state.selected+'/evidence-intelligence/demo');
+ if(input)input.value=JSON.stringify(result.sample,null,2);
+ }catch(error){if(input)input.placeholder=error.message}
+}
+function showIntelligenceResults(r){
+ const node=$('#intelligence-results');if(!node)return;
+ const months=Object.entries(r.reconciliation.monthly_receipts||{}).sort(([a],[b])=>a.localeCompare(b));
+ const max=Math.max(1,...months.map(([,value])=>Number(value)||0));
+ const graph=months.map(([month,value])=>`<div class="intel-bar-row"><span class="mono">${safe(month)}</span><div class="intel-track"><span class="intel-fill" style="width:${Math.max(0,Math.min(100,(Number(value)/max)*100)).toFixed(1)}%"></span></div><b>${money(value)}</b></div>`).join('');
+ const signals=(r.signals||[]).map(signal=>`<div class="intel-signal"><b>${safe(signal.code.replaceAll('_',' '))}</b><small>${safe(signal.origin)}</small><p>${safe(signal.explanation)}</p></div>`).join('');
+ const outliers=(r.outlier_months||[]).map(x=>`<div class="intel-signal"><b>${safe(x.month)} · ${money(x.observed_receipts_inr)}</b><small>UNSUPERVISED ML · ${safe(x.relative_to_median)}× median receipts</small><p>Unusual relative monthly receipt pattern. Uncalibrated anomaly margin: ${safe(x.anomaly_margin)}. Review source evidence; this is not a fraud finding.</p></div>`).join('');
+ node.innerHTML=`<div class="cards">${metaCard('Analyst income preview',money(r.reconciliation.accepted_monthly_income),'Not an accepted underwriting income')}${metaCard('Income difference',r.evidence_comparison.difference_ratio===null?'N/A':pct(r.evidence_comparison.difference_ratio),'Stored bank vs supporting income')}${metaCard('Flagged months',String((r.outlier_months||[]).length),'Synthetic-reference ML')}${metaCard('Assessment changed?',badge('NO'),'Review-only · no database writes')}</div>`+
+ `<div class="panel-body"><h3>Monthly receipts in the submitted batch</h3><div class="intel-bars">${graph}</div><p class="footnote">Only verified-flagged rows from analyst-submitted JSON enter this preview. Their flags do not establish bank-source authenticity.</p>
+ <h3>Model provenance</h3>${keyvals([['Detector',safe(r.model.name)],['Training reference',safe(r.model.reference)],['Model status',badge(r.model.status)],['Credit decision',badge('NOT USED')]])}
+ <h3>Explainable review signals</h3>${signals||'<p class="muted">No rule-based signals.</p>'}
+ <h3>ML anomaly observations</h3>${outliers||'<p class="muted">No months crossed the synthetic reference threshold.</p>'}
+ <h3>Suggested reviewer actions</h3><ol>${(r.recommended_actions||[]).map(a=>`<li>${safe(a)}</li>`).join('')}</ol><div class="alert info">${safe(r.disclaimer)}</div></div>`;
+}
 function renderPropertyReview(){return header('Property intelligence','Comparable prices cannot establish ownership or legal title.')+caseBanner()+
  panel('Independent review input','This preview does not write verified property evidence.',`<form id="property-form" class="panel-body"><div class="form-grid"><label class="field">Area (m²)<input type="number" name="area_sqm" min="11" step="0.1" value="100" required></label><label class="field">Declared value (INR)<input type="number" name="declared_value_inr" min="1" value="5000000" required></label></div><label class="field">Comparable sales (JSON array)<textarea name="comparables" rows="6" placeholder='[{"sale_reference":"REGISTERED-REF","area_sqm":100,"sale_price_inr":5000000,"distance_km":2,"months_ago":6,"issuer_verified":false}]'></textarea></label><p class="footnote">Registry, CERSAI, RERA, legal opinion and independent valuation gates remain unresolved until supported by authorized evidence.</p><button class="button primary" type="submit" ${!isStaff()?'disabled':''}>Assess indicative comparables</button></form>`)+
  '<section class="panel"><div class="panel-head"><h2>Property review</h2></div><div class="panel-body" id="property-results">Submit comparable evidence to inspect coverage.</div></section>';
@@ -134,8 +165,8 @@ function renderMonitoring(){return header('System monitoring','Real persisted co
 function renderCompliance(){return header('Regulatory source register','Official RBI sources with clear boundaries: references pending clause-level validation.')+`<div id="compliance-content"><div class="empty">Loading sources…</div></div>`}
 function renderConnectors(){return header('Integration matrix','Local fixture adapters demonstrate contract handling. All external provider connectivity is outstanding.')+`<div id="connector-content"><div class="empty">Loading integration matrix…</div></div>`;
 }
-const RENDER={overview:renderOverview,applications:renderQueue,new:renderNew,evidence:renderEvidence,financial:renderFinancial,identity:renderIdentity,property:renderProperty,decision:renderDecision,requests:renderRequests,scenarios:renderScenarios,income:renderIncome,'property-review':renderPropertyReview,sanction:renderSanction,documents:renderDocuments,policy:renderPolicy,simulation:renderSimulation,audit:renderAudit,replay:renderReplay,changes:renderChanges,monitoring:renderMonitoring,connectors:renderConnectors,compliance:renderCompliance};
-async function render(){nav();$('#content').innerHTML=RENDER[state.page]();if(state.page==='audit')fillAudit();if(state.page==='changes')fillChanges();if(state.page==='requests')fillNextEvidence();if(state.page==='documents')fillDocuments();if(state.page==='sanction')fillSanction();if(state.page==='monitoring')fillMonitoring();if(state.page==='connectors')fillConnectors();if(state.page==='compliance')fillCompliance();}
+const RENDER={overview:renderOverview,applications:renderQueue,new:renderNew,evidence:renderEvidence,financial:renderFinancial,identity:renderIdentity,property:renderProperty,decision:renderDecision,requests:renderRequests,scenarios:renderScenarios,income:renderIncome,intelligence:renderIntelligence,'property-review':renderPropertyReview,sanction:renderSanction,documents:renderDocuments,policy:renderPolicy,simulation:renderSimulation,audit:renderAudit,replay:renderReplay,changes:renderChanges,monitoring:renderMonitoring,connectors:renderConnectors,compliance:renderCompliance};
+async function render(){nav();$('#content').innerHTML=RENDER[state.page]();if(state.page==='intelligence')fillIntelligenceDemo();if(state.page==='audit')fillAudit();if(state.page==='changes')fillChanges();if(state.page==='requests')fillNextEvidence();if(state.page==='documents')fillDocuments();if(state.page==='sanction')fillSanction();if(state.page==='monitoring')fillMonitoring();if(state.page==='connectors')fillConnectors();if(state.page==='compliance')fillCompliance();}
 async function fillChanges(){if(!state.selected)return;const target=$('#change-results');if(!target)return;
  try{const diff=await api('/applications/'+state.selected+'/assessment-diff');
  target.innerHTML=keyvals([['Older revision',diff.older.revision],['Previous outcome',badge(diff.older.outcome)],['New revision',diff.newer.revision],['Current outcome',badge(diff.newer.outcome)],['Outcome changed',badge(diff.outcome_changed?'YES':'NO')]])+
@@ -163,6 +194,7 @@ document.addEventListener('click',async e=>{
  const policy=e.target.closest('[data-policy-action]');if(policy){try{let actionName=policy.dataset.policyAction;let body; if(['approve','activate'].includes(actionName)){let reason=prompt('Record the governance reason (minimum 12 characters).');if(!reason)return;body=JSON.stringify({reason});}let res=await api('/policies/'+policy.dataset.policyId+'/'+actionName,{method:'POST',body});toast('Policy '+res.state.toLowerCase());await reload();render()}catch(err){toast(err.message,true)}return}
  const action=e.target.closest('[data-action]');if(action){try{
    if(action.dataset.action.startsWith('consent-')){const granted=action.dataset.action==='consent-grant';await api('/applications/'+state.selected+'/consents',{method:'POST',body:JSON.stringify({purpose:'financial_underwriting',granted,provider:'borrower',categories:['financial','credit']})});await reload();await render();toast(granted?'Consent recorded.':'Consent revoked.')}
+   if(action.dataset.action==='intel-demo'){await fillIntelligenceDemo();toast('Synthetic transaction sample loaded.')}
    if(action.dataset.action==='submit-app'){await api('/applications/'+state.selected+'/submit',{method:'POST'});await reload();await go('decision');toast('Application submitted and assessed.')}
    if(action.dataset.action==='simulate'){let id=$('#simulate-choose').value;let v=await api('/policies/'+id+'/simulate',{method:'POST'});$('#simulation-results').innerHTML=panel('Simulation results',v.evaluated+' persisted synthetic assessments evaluated',`<div class="panel-body"><div class="cards" style="grid-template-columns:repeat(3,1fr)">${metaCard('Simulated approvals',v.simulated_counts.APPROVE,'Previously '+v.original_counts.APPROVE)}${metaCard('Simulated referrals',v.simulated_counts.REFER,'Previously '+v.original_counts.REFER)}${metaCard('Simulated rejections',v.simulated_counts.REJECT,'Previously '+v.original_counts.REJECT)}</div><h3>Changed outcomes</h3>${v.changes.map(x=>`<div class="keyval"><span>${safe(x.reference)}</span><b>${badge(x.old)} → ${badge(x.new)}</b></div>`).join('')||'<p class="muted small-text">No current outcome changes under this version.</p>'}</div>`);toast('Policy simulation complete.')}
  }catch(err){toast(err.message,true)}return}
@@ -191,6 +223,12 @@ document.addEventListener('submit',async e=>{
   let body=JSON.parse(new FormData(form).get('batch'));
   const r=await api('/applications/'+state.selected+'/income-reconciliation',{method:'POST',body:JSON.stringify(body)});
   $('#income-results').innerHTML=keyvals([['Reconciliation status',badge(r.status)],['Accepted monthly income (preview only)',money(r.accepted_monthly_income)],['Observed obligations',money(r.observed_monthly_obligations)],['Verified rows',r.verified_records],['Excluded unverified rows',r.unverified_records]])+`<p class="footnote">${esc(r.findings.join(', ')||'No additional flags')} · Does not update an underwriting decision.</p>`;
+ }
+ if(form.id==='intelligence-form'){
+  if(!state.selected)throw new Error('Select an application first.');
+  const body=JSON.parse(new FormData(form).get('batch'));
+  const response=await api('/applications/'+state.selected+'/evidence-intelligence',{method:'POST',body:JSON.stringify(body)});
+  showIntelligenceResults(response);toast('Advisory evidence analysis completed; no assessment changed.');
  }
  if(form.id==='property-form'){
   const entries=Object.fromEntries(new FormData(form));

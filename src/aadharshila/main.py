@@ -19,6 +19,7 @@ from .connectors import fetch_and_record, configured_adapter
 from .production_gate import evaluate_configured
 from .seed import seed
 from .income import TransactionBatch, reconcile
+from .evidence_intelligence import review_transactions, synthetic_case_batch
 from .documents_pipeline import clamav_scan, DocumentSafetyError
 from .document_isolation import extract_pdf_isolated, IsolatedExtractionUnavailable
 from .secure_documents import (encrypt_document, decrypt_document, storage_filename,
@@ -681,6 +682,32 @@ def income_reconciliation(id:str,body:TransactionBatch,db:Session=Depends(get_db
     # can be materialized into an underwriting assessment by the evidence pipeline.
     return {**result,'assessment_effect':'NONE','source_mode':'ANALYST_SUBMITTED_PREVIEW',
             'note':'Not independent bank verification, cannot authorize a mortgage decision.'}
+
+@app.post('/api/v1/applications/{id}/evidence-intelligence')
+def evidence_intelligence(id:str,body:TransactionBatch,db:Session=Depends(get_db),user:User=Depends(current_user)):
+    """Analyst-only ML-assisted review; no writes, promotions, or decision mutations."""
+    require(user,{'ANALYST','COMPLIANCE','ADMIN'})
+    a=load_app(db,id,user)
+    if body.applicant_type!=a.applicant_type:raise HTTPException(422,'Applicant category mismatch')
+    if len(body.transactions)>360:raise HTTPException(422,'Preview limited to 360 transactions')
+    snapshot=collect_snapshot(db,a)
+    evidence=snapshot.get('evidence',{})
+    def value(key):
+        raw=evidence.get(key,{}).get('value',{})
+        return raw.get('amount') if isinstance(raw,dict) else None
+    policy=active_policy(db,a.product,a.org_id)
+    return review_transactions(body,value('bank_income'),value('income_support'),
+                               float(policy.config['income_tolerance']))
+
+@app.get('/api/v1/applications/{id}/evidence-intelligence/demo')
+def evidence_intelligence_demo(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
+    """Synthetic, fixed, local sample with transaction provenance explicitly marked demo."""
+    require(user,{'ANALYST','COMPLIANCE','ADMIN'})
+    a=load_app(db,id,user)
+    if os.getenv('APP_ENV','development')=='production':raise HTTPException(404,'Synthetic demo unavailable')
+    return {'sample':synthetic_case_batch(a.applicant_type).model_dump(mode='json'),
+            'classification':'SYNTHETIC_ANALYST_INPUT',
+            'note':'Generated only for a local judge demonstration. No bank provider is contacted.'}
 
 @app.post('/api/v1/applications/{id}/property-review-preview')
 def property_review_preview(id:str,body:PropertyReview,db:Session=Depends(get_db),user:User=Depends(current_user)):
