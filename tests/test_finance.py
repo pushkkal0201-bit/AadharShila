@@ -38,3 +38,19 @@ def test_stress_never_claims_forecast():
     assert len(m)==5
     assert m[1]['foir']>m[0]['foir']
     assert m[2]['emi']>m[0]['emi']
+
+def test_negative_financial_values_rejected():
+    for amount, rate, months, income, obligations, collateral in [
+        (100000, 8.5, 240, -1, 0, 200000),
+        (100000, 8.5, 240, 50000, -1, 200000),
+        (100000, 8.5, 240, 50000, 0, -1),
+    ]:
+        with pytest.raises(ValueError,match='nonnegative'):
+            metrics(amount,rate,months,income,obligations,collateral)
+
+
+def test_stress_boundary_uses_exact_unrounded_foir():
+    scenarios=stress('100000.01',0,1,200000,0,350000,
+                     {'max_foir':0.5,'max_ltv':0.8})
+    assert scenarios[0]['foir']==0.5
+    assert scenarios[0]['policy_result']=='FAIL'

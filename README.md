@@ -72,6 +72,14 @@ A few practical consequences follow:
 | Allowing ML to override a credit gate | Runs anomaly review and synthetic risk research in separate, non-decisional paths | [`evidence_intelligence.py`](src/aadharshila/evidence_intelligence.py), [`risk_serving.py`](src/aadharshila/risk_serving.py) |
 | Calling any extracted document field "verified" | Separates extraction, origin, verification, expiry, consent, and source mode | [`secure_documents.py`](src/aadharshila/secure_documents.py), [`service.py`](src/aadharshila/service.py) |
 
+### Threshold and provenance hardening
+
+Affordability checks now compare the **unrounded** EMI burden and principal-to-collateral amounts against policy limits. The four-decimal FOIR/LTV shown in the UI is a display value, not the value used to decide whether a limit was exceeded. Negative financial obligations fail validation, and optional obligation evidence must carry authenticated live provenance when the service operates in restricted production mode.
+
+The risk-training pipeline rejects non-numeric values masquerading as missing data, feature values outside its documented **[0, 5]** research contract, and borrower identifiers duplicated after whitespace normalization. Offline external-cohort evaluation applies the same numeric and identifier checks. These are input-validation fixes; they do **not** improve or validate the model's predictive accuracy.
+
+Runtime safeguards also share one deployment-mode boundary. Only explicit `development` and `test` modes allow local demonstration features; `production`, `staging`, and other environment names use restricted behavior. Research preview and local password login remain unavailable in restricted environments. See [decision rules](docs/DECISION_RULES.md) and [ML research protocol](docs/hackathon/FULL_ML_PIPELINE.md).
+
 ### Two ML components, two different jobs
 
 **1. Evidence intelligence — analyst triage.** Six-month income reconciliation first excludes duplicate referenced receipts, loan proceeds, and other ineligible transactions. An `IsolationForest` then flags unusual normalized monthly receipt magnitudes relative to a **fixed generated reference distribution**. The visible result includes source comparisons, anomalies, plain-language review actions, and `assessment_effect: NONE`. In the demo, one synthetic monthly receipt jumps to ₹8,20,000. That is a reason to inspect the source, not a finding of fraud.
@@ -295,6 +303,8 @@ A working hackathon prototype is valuable precisely because the boundaries are v
 | Loan operations | Application queue, new case, Home Loan/LAP assessment, consent, reason codes, review tasks | [`main.py`](src/aadharshila/main.py), [`tests/test_api.py`](tests/test_api.py) |
 | Calculations | EMI, FOIR, LTV, alternative loan terms, income/rate/collateral stress tests | [`finance.py`](src/aadharshila/finance.py), [`tests/test_finance.py`](tests/test_finance.py) |
 | Evidence integrity | Source mode, expiry, contradictions, versioned evidence, replay and decision diff | [`service.py`](src/aadharshila/service.py), [`tests/test_engine.py`](tests/test_engine.py) |
+| Decision boundary hardening | Exact FOIR/LTV policy comparisons, nonnegative amounts and live provenance of optional obligations in production | [`engine.py`](src/aadharshila/engine.py), [`tests/test_engine.py`](tests/test_engine.py) |
+| Deployment and ML input controls | Fail-closed environment selection, numeric/feature-range validation and normalized borrower IDs | [`runtime.py`](src/aadharshila/runtime.py), [`risk_training.py`](src/aadharshila/risk_training.py), [`tests/test_environment_boundary.py`](tests/test_environment_boundary.py) |
 | Audit and governance | Immutable-in-practice assessment snapshots, policy simulations, separated author/approver actions | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/DECISION_RULES.md`](docs/DECISION_RULES.md) |
 | Advisory AI | Isolation Forest receipt anomalies with deterministic reconciliation and analyst actions | [`scripts/hackathon_demo.py`](scripts/hackathon_demo.py), [`tests/test_evidence_intelligence.py`](tests/test_evidence_intelligence.py) |
 | ML research | Calibrated logistic regression, chronological split, synthetic inference, SHA-256 artifact registry, PSI drift | [`risk_training.py`](src/aadharshila/risk_training.py), [`tests/test_full_ml_pipeline.py`](tests/test_full_ml_pipeline.py) |
@@ -302,7 +312,7 @@ A working hackathon prototype is valuable precisely because the boundaries are v
 | Protected documents | AES-GCM storage, download checks, bounded PDF extraction and access rules | [`secure_documents.py`](src/aadharshila/secure_documents.py), [`tests/test_encrypted_document_storage.py`](tests/test_encrypted_document_storage.py) |
 | Verification | Python suite, Windows/Ubuntu CI, Chromium browser, Docker/Postgres/document recovery | [GitHub Actions](https://github.com/pushkkal0201-bit/AadharShila/actions/workflows/quality.yml) |
 
-The latest completed main-branch run at the time of writing passed **four hosted jobs**: Windows, Ubuntu, Chromium, and Docker/PostgreSQL recovery. The recorded local development checkpoint was **132 passing tests**. These are *software* checks, not validation of real lending efficacy. [Browse current build results](https://github.com/pushkkal0201-bit/AadharShila/actions/workflows/quality.yml).
+The last verified baseline main-branch run at the time of this README update passed **four hosted jobs**: Windows, Ubuntu, Chromium, and Docker/PostgreSQL recovery. The recorded local development checkpoint was **132 passing tests**. These are *software* checks, not validation of real lending efficacy. [Browse current build results](https://github.com/pushkkal0201-bit/AadharShila/actions/workflows/quality.yml).
 
 ### Next engineering work, in order
 
@@ -319,6 +329,10 @@ The latest completed main-branch run at the time of writing passed **four hosted
 The longer institutional prerequisite list is maintained in [Go-live controls](docs/INSTITUTIONAL_GO_LIVE.md) and the [engineering status register](docs/PROJECT_STATUS_2026-11-10.md). This roadmap describes work **not yet done**; it is not a disguised feature list.
 
 ## 8. Local setup and verification
+
+For the new boundary regressions, run `.venv\\Scripts\\python.exe -m pytest -q tests/test_engine.py tests/test_finance.py tests/test_environment_boundary.py tests/test_full_ml_pipeline.py tests/test_risk_external_validation.py` on Windows after `setup.bat`. The full `test.bat` still covers the whole repository. These are engineering tests against synthetic or isolated fixtures, not real mortgage validation.
+
+
 
 ### Prerequisites
 

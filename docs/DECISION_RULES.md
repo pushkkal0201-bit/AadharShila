@@ -12,6 +12,14 @@ All money arithmetic in `finance.py` uses Python `Decimal` and round-half-up to 
 
 An unverified income figure is **not** substituted for accepted income. No income / no valuation results in an unresolved denominator, not a zero-risk or positive pass.
 
+## Precision and trust boundaries
+
+EMI is rounded to paise using `Decimal`, but policy comparisons do **not** use the four-decimal FOIR/LTV fields shown to operators. A loan with a tiny ratio breach is still a breach; rounded display values cannot turn it into an approval. Baseline and stress scenarios use the same exact policy-limit comparisons.
+
+Negative principal, accepted income, obligations or property valuation are rejected by financial evaluation rather than producing a misleading eligibility metric. A missing or invalid amount remains a reason for referral. An optional obligation record must be authenticated live evidence before it can contribute to a restricted-environment production assessment; an unauthenticated optional record creates a review blocker. Source-verified status in a synthetic development fixture never proves a real financial obligation.
+
+Regression coverage includes tiny FOIR and LTV overages that display exactly at the policy limit, negative obligations, and unsigned/non-live optional obligation evidence in production.
+
 ## Illustrative policies
 
 | Parameter | Home Loan | LAP |
