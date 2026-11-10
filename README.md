@@ -17,6 +17,25 @@ Aadharshila evaluates mortgage applications against consent-bound evidence, fina
 
 ---
 
+## Implementation status — 10 November 2026
+
+Aadharshila is a runnable **synthetic mortgage underwriting demonstration**, with a separate research-only model laboratory. The evidence and policy workflow can explain and replay simulated decisions; the ML scores cannot sanction, reject, refer or price a real loan.
+
+| Area | Implemented today | Boundary |
+| --- | --- | --- |
+| Mortgage decisioning | Home Loan/LAP intake, EMI/FOIR/LTV, policy gates, reason codes, versioning, evidence revisions and replay | All policies and cases are illustrative |
+| Evidence intelligence | Six-month receipt reconciliation, income-source discrepancies and Isolation Forest anomaly review | Artificial ML reference; review-only findings |
+| Mortgage-risk research | Logistic regression, validation-only Platt calibration, 65/15/20 chronological evaluation, SHA-256-pinned artifact, explainable preview and PSI drift | Invented outcome labels; no underwriting decision effect |
+| Independent-date evaluation | Offline later-cohort evaluation with calibration, baseline, uncertainty, cohort and drift diagnostics | Synthetic cohort exercised; no real lender outcome validation |
+| Security and operations | Tenant/role controls, encrypted document storage, migration and recovery tests, OIDC framework, GitHub CI | Real providers, independent reviews and lender approvals outstanding |
+
+**Latest verified baseline:** the 10 November 2026 [`ff72667c` release](https://github.com/pushkkal0201-bit/AadharShila/commit/ff72667c77681cd4a050178ed48afb432165eda0) passed all [four hosted CI jobs](https://github.com/pushkkal0201-bit/AadharShila/actions/runs/42860845343) (Windows, Ubuntu, Chromium and PostgreSQL recovery). The development checkpoint reported **132 passing local Python tests** before the Windows dependency setup correction; rerun `test.bat` to establish results on a particular machine.
+
+**Start here:** [current implementation and remaining work](docs/PROJECT_STATUS_2026-11-10.md) · [Windows testing guide](docs/TESTING_WINDOWS.md) · [six-minute demonstration](docs/hackathon/DEMO_RUNBOOK.md) · [full ML pipeline](docs/hackathon/FULL_ML_PIPELINE.md) · [independent-date evaluation](docs/hackathon/INDEPENDENT_MODEL_VALIDATION.md).
+
+**Remaining for the hackathon:** verify a complete local demo, record an actual walkthrough and complete the organizer's official submission. **Remaining for real lending:** lawful lender/provider access, approved policies, representative historical default data, independent model and security validation, operational controls and binding sanction/disbursement infrastructure.
+
+---
 ## Choose a path
 
 <table>
@@ -650,6 +669,8 @@ cd /d D:\Projects\AadharShila
 test.bat
 ```
 
+The setup script also installs the ML research dependencies (`pandas`, NumPy and scikit-learn), so `test.bat` can run the full model-training test suite. Verify the environment before testing with `.venv\Scripts\python.exe -c "import pandas, numpy, sklearn; print('ML dependencies OK')"`. For the complete underwriting and model test sequence, see [Windows verification](docs/TESTING_WINDOWS.md).
+
 **Check the interpreter chosen for this project:**
 
 ```bat
@@ -725,7 +746,7 @@ curl -sS http://127.0.0.1:8000/health/ready
 | `The system cannot find the path specified` | Clone the repository first or use the actual location instead of `D:\Projects\AadharShila`. |
 | Multiple Python versions installed | Run `py -0p`; create `.venv` with `py -3.11 -m venv .venv` (or `py -3.12`). |
 | `setup.bat` fails to create `.venv` | The launcher looks for Python 3.12 when the Windows `py` command exists. Explicitly create `.venv` first with a supported interpreter. |
-| Missing packages | Rerun `setup.bat` from the repo root and inspect the first pip error. |
+| Missing packages or `No module named 'pandas'` | Rerun `setup.bat` from the repo root (installs `requirements-ml.txt`); verify with `.venv\Scripts\python.exe -c "import pandas, numpy, sklearn"`. |
 | Port 8000 occupied | Stop the previous server or change `--port` in `scripts/windows/run.ps1`. |
 | Worker queue does not advance | Start `worker.bat` (Windows) or `python -m aadharshila.worker`. |
 | Migrations fail | Check `DATABASE_URL` and run `python -m alembic current`; don't delete an existing database without a backup. |
@@ -847,7 +868,9 @@ A real deployment also requires TLS termination, network isolation, managed secr
 
 GitHub Actions defines four jobs: **Windows tests**, **Ubuntu tests**, **Chromium browser smoke**, and **Docker/PostgreSQL + document recovery**. These run on pushes to `main` and pull requests. [Review the live CI history](https://github.com/pushkkal0201-bit/AadharShila/actions/workflows/quality.yml) rather than assuming the badge guarantees a release.
 
-The 10 November 2026 engineering checkpoint recorded **109 passing local Python tests**, an Alembic migration through `4d92b41f8aa7`, a JavaScript syntax check, and a **60-request authenticated HTTP smoke with no failures**. Its measured p95 was **47.596 ms** on a local Linux/SQLite synthetic workload; this is not production capacity or turnaround time. [The merged release's hosted CI run](https://github.com/pushkkal0201-bit/AadharShila/actions/runs/42780517502) passed Windows, Ubuntu, browser, and recovery jobs.
+**Current verified baseline (10 November 2026):** the [merged independent-evaluation release](https://github.com/pushkkal0201-bit/AadharShila/commit/ff72667c77681cd4a050178ed48afb432165eda0) passed [all four CI jobs](https://github.com/pushkkal0201-bit/AadharShila/actions/runs/42860845343): Windows and Ubuntu Python checks, a real Chromium browser smoke, and Docker/PostgreSQL document recovery. The authoring environment reported **132 passing Python tests** after the external-date evaluator was added. This is a recorded checkpoint, not a substitute for a fresh machine-specific test run. Earlier 60-request Linux/SQLite synthetic HTTP smoke reported p95 **47.596 ms**; this is neither a production capacity result nor actual mortgage processing time.
+
+On Windows, `setup.bat` installs **`requirements-ml.txt`** as well as the application dependencies, including pandas. The full `test.bat` suite exercises research training and independent-date validation. If an older `.venv` reports `ModuleNotFoundError: No module named 'pandas'`, rerun `setup.bat` or `.venv\Scripts\python.exe -m pip install -r requirements-ml.txt` from the repository root. See [Windows testing](docs/TESTING_WINDOWS.md) for case-by-case pass conditions.
 
 ```bash
 python -m pytest -q
@@ -910,5 +933,7 @@ Institutional release requires separately issued credit-policy, provider-access,
 Do not commit `.env`, credential files, encryption keys, live borrower records, databases, OCR extracts, or document uploads. Do not change a simulated connector label to `LIVE` without authenticated provenance and authorized access.
 
 ### Technical references
+
+[Current project status](docs/PROJECT_STATUS_2026-11-10.md) · [Windows testing](docs/TESTING_WINDOWS.md) · [ML research lifecycle](docs/hackathon/FULL_ML_PIPELINE.md) · [Independent model evaluation](docs/hackathon/INDEPENDENT_MODEL_VALIDATION.md) · [Hackathon demo runbook](docs/hackathon/DEMO_RUNBOOK.md)
 
 [Architecture](docs/ARCHITECTURE.md) · [Decision rules](docs/DECISION_RULES.md) · [Judge demo](docs/DEMO_SCRIPT.md) · [Engineering release](docs/ENGINEERING_RELEASE_2026-11-10.md) · [Model training](docs/RISK_TRAINING.md) · [Integrations](docs/INTEGRATIONS.md) · [Encrypted document storage](docs/SECURE_DOCUMENT_STORAGE.md) · [Windows D: drive](docs/WINDOWS_D_DRIVE.md) · [Operations](docs/OPERATIONS.md) · [Institutional go-live](docs/INSTITUTIONAL_GO_LIVE.md)
