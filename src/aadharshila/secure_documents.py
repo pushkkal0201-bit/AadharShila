@@ -5,8 +5,8 @@ Keys are supplied by the hosting institution, not generated or stored by the app
 This is an at-rest control, not a substitute for secure object storage, TLS,
 separate key custody, retention governance, or independent security assessment.
 """
-from .runtime import is_production
 from __future__ import annotations
+from .runtime import is_production
 import base64
 import hashlib
 import json

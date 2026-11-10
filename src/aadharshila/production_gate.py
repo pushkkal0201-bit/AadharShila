@@ -3,8 +3,8 @@
 Cryptographic verification is not proof of lender licensing or actual professional
 sign-off. Institution-managed public-key trust anchors are required.
 """
-from .runtime import is_production
 from __future__ import annotations
+from .runtime import is_production
 import base64
 import hashlib
 import json

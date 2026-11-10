@@ -3,8 +3,8 @@
 This module is deliberately NOT imported by the deterministic decision engine.
 It never loads pickle, accepts arbitrary model upload, or persists borrower data.
 """
-from .runtime import is_production
 from __future__ import annotations
+from .runtime import is_production
 
 import hashlib
 import hmac

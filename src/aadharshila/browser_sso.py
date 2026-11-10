@@ -3,8 +3,8 @@
 No self-service account registration, no token trust without pinned issuer JWKS,
 no dynamic redirect URI, and no local password login in production.
 """
-from .runtime import is_production
 from __future__ import annotations
+from .runtime import is_production
 import base64
 import hashlib
 import hmac
