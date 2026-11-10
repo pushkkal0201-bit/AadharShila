@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 330" role="img" aria-labelledby="title desc">
+<title id="title">Aadharshila — evidence-led mortgage underwriting</title>
+<desc id="desc">An animated engineering banner showing the sequence evidence, policy, decision and historical replay. This is a synthetic demonstration system.</desc>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#101e2c"/><stop offset="1" stop-color="#07121c"/></linearGradient>
+  <linearGradient id="line" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#4be0bd"/><stop offset="1" stop-color="#7dc8f7"/></linearGradient>
+  <pattern id="grid" width="26" height="26" patternUnits="userSpaceOnUse"><path d="M26 0H0V26" fill="none" stroke="#ffffff" stroke-opacity=".055"/></pattern>
+</defs>
+<style><![CDATA[
+  .card { fill:#122536; stroke:#345064; stroke-width:1; }
+  .step { animation: breathe 8s ease-in-out infinite; }
+  .step2 { animation-delay:2s; }
+  .step3 { animation-delay:4s; }
+  .step4 { animation-delay:6s; }
+  .dot { animation: move 8s ease-in-out infinite; }
+  .beam { animation: fade 8s ease-in-out infinite; }
+  @keyframes breathe {0%,6%,27%,100%{opacity:.55} 11%,21%{opacity:1}}
+  @keyframes move {0%,6%{transform:translateY(0px);opacity:0} 10%{opacity:1} 93%{transform:translateY(147px);opacity:1} 100%{transform:translateY(147px);opacity:0}}
+  @keyframes fade {0%,100%{opacity:.45} 50%{opacity:1}}
+  @media (prefers-reduced-motion: reduce) {.step,.dot,.beam{animation:none;opacity:1}}
+]]></style>
+<rect width="1200" height="330" rx="18" fill="url(#bg)"/>
+<rect width="1200" height="330" rx="18" fill="url(#grid)"/>
+<path d="M38 38H1162" stroke="#456074" stroke-opacity=".5"/>
+<rect x="69" y="61" width="36" height="36" rx="10" fill="#2ad0aa"/>
+<path d="M80 85L87 73L95 85M82 81H93" fill="none" stroke="#092330" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="117" y="85" font-family="Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#91e8d4">MORTGAGE OPERATIONS</text>
+<text x="66" y="160" font-family="Segoe UI, Arial, sans-serif" font-size="64" font-weight="750" letter-spacing="-2" fill="#f4f8fb">Aadharshila</text>
+<text x="69" y="196" font-family="Segoe UI, Arial, sans-serif" font-size="19" fill="#b8c9d5">Follow the evidence. Explain the decision.</text>
+<text x="69" y="224" font-family="Segoe UI, Arial, sans-serif" font-size="19" fill="#b8c9d5">Keep the history intact.</text>
+<line x1="69" y1="258" x2="565" y2="258" stroke="#355266"/>
+<text x="69" y="286" font-family="Segoe UI, Arial, sans-serif" font-size="12" letter-spacing="1.4" fill="#85a6b9">HOME LOAN / LAP</text>
+<text x="253" y="286" font-family="Segoe UI, Arial, sans-serif" font-size="12" letter-spacing="1.4" fill="#85a6b9">SYNTHETIC DEMO</text>
+<text x="462" y="286" font-family="Segoe UI, Arial, sans-serif" font-size="12" letter-spacing="1.4" fill="#85a6b9">v0.2 API</text>
+<rect x="634" y="53" width="507" height="243" rx="16" fill="#0b1926" stroke="#274359"/>
+<text x="660" y="80" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#7f9aac" letter-spacing="2">ASSESSMENT TRACE</text>
+<rect x="1038" y="65" width="79" height="22" rx="11" fill="#193746"/>
+<text x="1078" y="80" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="700" fill="#90e6d1">SIMULATED</text>
+<path d="M680 113V249" fill="none" stroke="#3d6677" stroke-width="2" stroke-dasharray="3 6"/>
+<circle class="dot" cx="680" cy="113" r="5" fill="#76efd3"/>
+<g class="step">
+  <rect class="card" x="703" y="96" width="409" height="42" rx="8"/>
+  <text x="718" y="122" font-family="Segoe UI, Arial, sans-serif" font-weight="700" font-size="14" fill="#ecf6fa">01</text>
+  <text x="758" y="122" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#bfd3df">Evidence with source and consent</text>
+</g>
+<g class="step step2">
+  <rect class="card" x="703" y="144" width="409" height="42" rx="8"/>
+  <text x="718" y="170" font-family="Segoe UI, Arial, sans-serif" font-weight="700" font-size="14" fill="#ecf6fa">02</text>
+  <text x="758" y="170" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#bfd3df">Versioned rules + exact arithmetic</text>
+</g>
+<g class="step step3">
+  <rect class="card" x="703" y="192" width="409" height="42" rx="8"/>
+  <text x="718" y="218" font-family="Segoe UI, Arial, sans-serif" font-weight="700" font-size="14" fill="#ecf6fa">03</text>
+  <text x="758" y="218" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#bfd3df">APPROVE / REFER / REJECT</text>
+</g>
+<g class="step step4">
+  <rect class="card" x="703" y="240" width="409" height="42" rx="8"/>
+  <text x="718" y="266" font-family="Segoe UI, Arial, sans-serif" font-weight="700" font-size="14" fill="#ecf6fa">04</text>
+  <text x="758" y="266" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#bfd3df">Stored snapshot and historical replay</text>
+</g>
+<path class="beam" d="M69 313H1132" stroke="url(#line)" stroke-width="2" opacity=".7"/>
+</svg>

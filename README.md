@@ -1,27 +1,90 @@
 # Aadharshila
 
-**Evidence-driven mortgage underwriting for Home Loans and Loans Against Property.** Aadharshila turns a loan file into an explainable assessment: which evidence was accepted, which rules ran, why the case was approved, referred, or rejected *in simulation*, and what changed after an analyst corrected the file.
+<p align="center">
+  <img src="docs/visuals/underwriting-loop.svg" width="100%" alt="Animated overview of Aadharshila's evidence, policy, decision and replay pipeline." />
+</p>
 
-[![Quality checks](https://github.com/pushkkal0201-bit/AadharShila/actions/workflows/quality.yml/badge.svg)](https://github.com/pushkkal0201-bit/AadharShila/actions/workflows/quality.yml) [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml) [![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white)](src/aadharshila/main.py) [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](docker-compose.yml) [![Synthetic demo](https://img.shields.io/badge/data-synthetic%20demo-64748B)](data/MANIFEST.md)
-
-**Built for the Housing Fintech Challenge — Problem Statement 2: Digitally Automated Mortgage Underwriting Engine.** The repository contains a working local prototype, 16 invented loan cases, underwriting and document workflows, an analyst-facing evidence-anomaly model, and a separate synthetic credit-risk research laboratory.
-
-> **Scope:** This is a software demonstration, **not** a licensed lending service. All seeded borrowers, evidence, provider assertions, and policy terms are synthetic or illustrative. `APPROVE` is a simulated engine outcome, not a sanction. The research ML score does not approve, reject, refer, price, or disburse loans. No official KYC, credit-bureau, Account Aggregator, property-registry, sanction, or disbursement integration is connected.
-
-**Jump to:** [Why](#1-why-aadharshila-exists) · [Engineering edge](#2-what-is-different) · [Architecture](#3-system-architecture-and-data-pipeline) · [Technology choices](#4-technology-and-why-it-is-here) · [100k-user scale plan](#5-scaling-to-100000-active-users-a-design-not-a-benchmark) · [Trade-offs](#6-constraints-and-trade-offs) · [Delivered / next](#7-implemented-now-and-next) · [Run and verify](#8-local-setup-and-verification)
+<p align="center"><strong>Mortgage decisions that can show their work.</strong></p>
 
 <p align="center">
-  <a href="docs/overview.webp"><img src="docs/overview.webp" alt="Aadharshila overview: underwriting status, financial metrics and evidence readiness" width="920"></a>
+  <a href="#the-as-1004-case-in-four-steps">Follow one case</a> ·
+  <a href="#3-system-architecture-and-data-pipeline">Inspect the system</a> ·
+  <a href="#8-local-setup-and-verification">Run locally</a> ·
+  <a href="#7-implemented-now-and-next">See what's built</a>
 </p>
 
 <p align="center">
-  <a href="docs/queue.webp"><img src="docs/queue.webp" alt="Synthetic mortgage application queue" width="46%"></a>
-  <a href="docs/decision.webp"><img src="docs/decision.webp" alt="Deterministic decision explanation and reason codes" width="46%"></a>
+  <a href="https://github.com/pushkkal0201-bit/AadharShila/actions/workflows/quality.yml"><img alt="Quality checks" src="https://github.com/pushkkal0201-bit/AadharShila/actions/workflows/quality.yml/badge.svg" /></a>
+  <a href="pyproject.toml"><img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-345c7d?logo=python&amp;logoColor=white" /></a>
+  <a href="data/MANIFEST.md"><img alt="Synthetic data only" src="https://img.shields.io/badge/data-synthetic%20only-5d6b78" /></a>
 </p>
+
+Aadharshila is a local underwriting workspace for Home Loans and Loans Against Property. It records the application and supporting evidence, calculates EMI/FOIR/LTV, and applies a versioned credit policy. The output is an explainable `APPROVE`, `REFER` or `REJECT` **simulation**, with a saved snapshot you can still inspect after an analyst changes the file.
+
+Built for the **Housing Fintech Challenge — Digitally Automated Mortgage Underwriting Engine (Problem Statement 2)**, the repo includes 16 synthetic cases, a transaction-anomaly reviewer, and a separate credit-risk research lab.
+
+> [!IMPORTANT]
+> **This is not a lending service.** Borrowers, evidence providers and policy thresholds in the demo are synthetic or illustrative. A simulated `APPROVE` is not a sanction. ML outputs cannot approve, reject, refer, price or disburse a loan. No official KYC, credit-bureau, Account Aggregator, property-record or disbursement integration is live.
+
+<table>
+<tr>
+<td width="25%"><a href="#the-as-1004-case-in-four-steps"><strong>01 / A case</strong></a><br/><sub>Conflicting income → documented referral</sub></td>
+<td width="25%"><a href="#2-what-is-different"><strong>02 / Design</strong></a><br/><sub>Evidence revisions and replay</sub></td>
+<td width="25%"><a href="#3-system-architecture-and-data-pipeline"><strong>03 / Architecture</strong></a><br/><sub>Request, rules and persistence</sub></td>
+<td width="25%"><a href="#8-local-setup-and-verification"><strong>04 / Reproduce</strong></a><br/><sub>Setup, tests and ML laboratory</sub></td>
+</tr>
+</table>
+
+### The AS-1004 case in four steps
+
+<p align="center">
+  <img src="docs/visuals/as-1004-trace.svg" width="100%" alt="Synthetic AS-1004: ₹1,00,000 bank income versus ₹55,000 supporting income creates a 45 percent discrepancy; the case is referred, revised, and replayable." />
+</p>
+
+What's useful here isn't the `REFER` badge. It's the chain of evidence behind it. With income support at ₹55,000 against ₹1,00,000 in bank evidence, the **45% disagreement exceeds the 15% illustrative tolerance**. Correct the synthetic support figure to ₹99,000 and Aadharshila creates a new assessment. The old one remains reproducible. The new result may still be `REFER` if another requirement is unresolved.
+
+<details>
+<summary><strong>Open the six-minute judge walkthrough</strong></summary>
+
+1. Sign in as the local **Credit analyst** and open `AS-1004`.
+2. Compare the two income assertions in **Evidence explorer**.
+3. In **Decision explanation**, find `INCOME_CONTRADICTION` and the rule that triggered it.
+4. Open **Evidence intelligence · ML**, load the synthetic transactions and run the read-only anomaly review.
+5. Correct the supporting income through the synthetic analyst workflow and reassess.
+6. Open **Historical replay**. Verify that the original decision still uses the original evidence and policy.
+
+[Full demonstration runbook](docs/hackathon/DEMO_RUNBOOK.md) · [Windows test checklist](docs/TESTING_WINDOWS.md)
+
+</details>
+
+### The actual workspace
+
+<p align="center">
+  <a href="docs/overview.webp"><img src="docs/overview.webp" width="96%" alt="Screenshot of Aadharshila's local underwriting dashboard and synthetic evidence status." /></a>
+</p>
+
+<details>
+<summary><strong>See the application queue and decision explanation screens</strong></summary>
+
+<p align="center">
+  <a href="docs/queue.webp"><img src="docs/queue.webp" width="47%" alt="Application queue containing synthetic mortgage cases." /></a>
+  <a href="docs/decision.webp"><img src="docs/decision.webp" width="47%" alt="Executed underwriting rules, reasons and decision explanation." /></a>
+</p>
+
+These are screenshots of the running local demo, not mockups of a live lender connection.
+
+</details>
+
+<details>
+<summary><strong>What can you interact with in this README?</strong></summary>
+
+The navigation links jump to specific sections, screenshots open in full, these panels expand on click, and the Mermaid diagrams below render on GitHub. The SVG motion is decorative and respects reduced-motion settings. GitHub does not run arbitrary JavaScript or the underwriting app inside a README; the live interface starts only after [local setup](#8-local-setup-and-verification).
+
+</details>
 
 ## 1. Why Aadharshila exists
 
-A mortgage application is not a spreadsheet row. A borrower can qualify on EMI and still be impossible to underwrite because an income record conflicts with bank deposits, the title report is pending, or the bureau provider has not returned a result. An eligibility calculator rarely tells an analyst *which fact is safe to use*; an opaque score rarely tells them why the answer changed after new evidence arrived.
+EMI is the easy part. The harder question is whether the inputs can be trusted. A borrower may pass an affordability check while a bank statement disagrees with salary support, a property-title review remains pending, or a bureau request fails. A spreadsheet can give you a number; it usually cannot tell the next analyst **why that number belonged in the decision**.
 
 Take the synthetic **AS-1004** case. The applicant requests a ₹20 lakh Loan Against Property. Bank-income evidence reports ₹1,00,000 per month; supporting income reports ₹55,000. The discrepancy is **45%**, above the demonstration policy's **15% tolerance**. The financial ratios alone do not resolve that contradiction. Aadharshila returns `REFER`, records `INCOME_CONTRADICTION`, and identifies the outstanding review. An analyst can correct synthetic supporting evidence, obtain a fresh assessment, and still replay the old one from the evidence and policy that existed at that moment.
 
@@ -59,7 +122,7 @@ The formulas and precedence rules are specified in [Decision rules](docs/DECISIO
 
 ## 2. What is different
 
-The key design choice is to make **evidence revision the unit of underwriting history**. Instead of storing just a final decision, the service records the supporting snapshot, the policy version, executed controls, reasons, and assessment ID. A change to an income assertion creates a new assessment; it does not silently rewrite the old one. Historical replay is a rerun of the saved evidence/policy snapshot, not a fresh query to a provider that may return different data tomorrow.
+An easy way to lose trust in a lending workflow is to overwrite yesterday's evidence with today's correction. The outcome stays in the database, but its explanation becomes impossible to reconstruct. Aadharshila treats **each evidence revision as part of the history**. It freezes the inputs, policy version, executed checks and reasons with the assessment. A correction creates a new assessment; replay reads the old snapshot instead of asking a provider for whatever answer it has today.
 
 A few practical consequences follow:
 
