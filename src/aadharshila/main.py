@@ -1,5 +1,5 @@
 """Aadharshila HTTP API and bundled local interface."""
-import os, json, re, hashlib, html, io, uuid, time
+import os, json, re, hashlib, html, io, uuid, time, tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from datetime import datetime,timezone
@@ -20,6 +20,8 @@ from .production_gate import evaluate_configured
 from .seed import seed
 from .income import TransactionBatch, reconcile
 from .documents_pipeline import clamav_scan, extract_pdf, DocumentSafetyError
+from .secure_documents import (encrypt_document, decrypt_document, storage_filename,
+    DocumentKeyUnavailable, DocumentIntegrityError, FORMAT_ENCRYPTED, FORMAT_LEGACY, encryption_key_status)
 from .sanction import preview as sanction_preview
 from .property_intelligence import PropertyReview, evaluate_property
 from .risk_monitor import population_stability_index
@@ -484,6 +486,8 @@ def production_readiness(db:Session=Depends(get_db),user:User=Depends(current_us
             'production_authorizations':policies.get('HOME_LOAN',{}).get('signed_attestations',{}).get('requirements',{}),
             'per_product':policies,
             'providers':providers,
+            'document_storage':{**encryption_key_status(), 'encryption_required':os.getenv('APP_ENV')=='production',
+                                'legacy_plaintext_allowed':os.getenv('APP_ENV','development')!='production'},
             'note':'Signatures are checked against an institution-configured trust store. Licensing, legal competence, and production certification cannot be established by this software.'}
 
 @app.get('/api/v1/applications/{id}/compliance-checks')
@@ -574,7 +578,7 @@ async def upload_document(id:str,file:UploadFile=File(...),db:Session=Depends(ge
     is_pdf=raw.startswith(b'%PDF-');is_txt=not is_pdf and b'\x00' not in raw[:4096] and file.filename.lower().endswith('.txt')
     if not (is_pdf or is_txt):raise HTTPException(415,'Only valid PDFs or UTF-8 TXT accepted in this build')
     media='application/pdf' if is_pdf else 'text/plain'
-    digest=hashlib.sha256(raw).hexdigest();document_id=str(uuid.uuid4());destination=UPLOADS/(document_id+('.pdf' if is_pdf else '.txt'))
+    digest=hashlib.sha256(raw).hexdigest();document_id=str(uuid.uuid4())
     text_output='';status='PARSED';fields={}
     try:
         scan_result=clamav_scan(raw)
@@ -595,44 +599,76 @@ async def upload_document(id:str,file:UploadFile=File(...),db:Session=Depends(ge
     for line in text_output.splitlines():
         match=re.match(r'^\s*(monthly_income|property_value|reference)\s*:\s*([^\n]{1,60})$',line,re.I)
         if match:fields[match.group(1).lower()]=match.group(2).strip()
-    destination.write_bytes(raw)
+    try:
+        secured=encrypt_document(raw,a.org_id,a.id,document_id)
+    except DocumentKeyUnavailable:
+        raise HTTPException(503,'Document encryption key configuration unavailable') from None
+    if os.getenv('APP_ENV','development')=='production':
+        text_output=''
+        fields={k:v for k,v in fields.items() if k in ('signature_check','ocr_status','page_count','parse_error')}
+    destination=UPLOADS/storage_filename(document_id,secured.storage_format,media)
+    # Restrict local object permissions and atomically publish complete ciphertext.
+    temporary=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.upload-',suffix='.tmp',dir=UPLOADS,delete=False) as handle:
+            temporary=Path(handle.name)
+            if os.name=='posix':os.fchmod(handle.fileno(),0o600)
+            handle.write(secured.contents)
+            handle.flush();os.fsync(handle.fileno())
+        os.replace(temporary,destination)
+    finally:
+        if temporary and temporary.exists():temporary.unlink()
     bump(db,a,user,'Document uploaded')
-    doc=Document(id=document_id,application_id=id,filename=Path(file.filename).name[:255],media_type=media,byte_count=len(raw),sha256=digest,path=str(destination),parse_status=status,extracted_text=text_output,extracted_fields=fields)
+    doc=Document(id=document_id,application_id=id,filename=Path(file.filename).name[:255],media_type=media,byte_count=len(raw),sha256=digest,path=str(destination),parse_status=status,extracted_text=text_output,extracted_fields=fields,
+                 storage_format=secured.storage_format,storage_sha256=secured.storage_sha256,encryption_key_id=secured.key_id)
     db.add(doc);db.flush()
     if a.workflow!='DRAFT':build_assessment(db,a,user)
     audit(db,id,user,'DOCUMENT_UPLOADED',detail={'document_id':doc.id,'sha256':digest,'parse_status':status})
     db.commit()
-    return {'id':doc.id,'status':status,'sha256':digest,'fields':fields,'verified':False,'malware_scan':scan_result}
+    return {'id':doc.id,'status':status,'sha256':digest,'fields':fields,'verified':False,'malware_scan':scan_result,'encrypted_at_rest':secured.storage_format==FORMAT_ENCRYPTED}
 
 @app.get('/api/v1/applications/{id}/documents')
 def list_documents(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
     load_app(db,id,user);rows=db.scalars(select(Document).where(Document.application_id==id)).all()
-    return {'items':[{'id':d.id,'filename':d.filename,'sha256':d.sha256,'byte_count':d.byte_count,'parse_status':d.parse_status,'fields':d.extracted_fields,'verified':False} for d in rows]}
+    return {'items':[{'id':d.id,'filename':d.filename,'sha256':d.sha256,'byte_count':d.byte_count,'parse_status':d.parse_status,'fields':d.extracted_fields,'verified':False,'encrypted_at_rest':d.storage_format==FORMAT_ENCRYPTED} for d in rows]}
 
 @app.get('/api/v1/applications/{id}/documents/{document_id}/download')
 def download_document(id:str,document_id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
-    load_app(db,id,user)
+    a=load_app(db,id,user)
     require(user,{'BORROWER','ANALYST','COMPLIANCE','AUDITOR','ADMIN'})
     doc=db.get(Document,document_id)
     if not doc or doc.application_id!=id:raise HTTPException(404,'Document not found')
     root=UPLOADS.resolve()
+    storage_format=doc.storage_format or FORMAT_LEGACY
+    try:
+        filename=storage_filename(doc.id,storage_format,doc.media_type)
+    except DocumentIntegrityError:
+        raise HTTPException(409,'Document storage metadata invalid') from None
     recorded=Path(doc.path)
     if recorded.is_absolute():
-        # Legacy absolute paths were used in the first local demo build.
-        # A restore to another drive resolves by the content-addressed document ID.
-        suffix='.pdf' if doc.media_type=='application/pdf' else '.txt'
-        stored=recorded.resolve()
-        if root not in stored.parents or not stored.is_file():
-            stored=(root/(doc.id+suffix)).resolve()
+        # Legacy absolute paths are not portable across drive/restore operations.
+        candidate=recorded.resolve()
+        stored=candidate if root in candidate.parents and candidate.is_file() else (root/filename).resolve()
     else:
         stored=(root/recorded).resolve()
     if root not in stored.parents:raise HTTPException(409,'Storage path invalid')
     if not stored.is_file():raise HTTPException(404,'Document bytes unavailable')
-    if stored.stat().st_size!=doc.byte_count or hashlib.sha256(stored.read_bytes()).hexdigest()!=doc.sha256:
-        raise HTTPException(409,'Stored document failed integrity check')
+    try:
+        raw=decrypt_document(stored.read_bytes(),storage_format=storage_format,key_id=doc.encryption_key_id,
+                             org_id=a.org_id,application_id=id,document_id=doc.id,
+                             plaintext_sha256=doc.sha256,stored_sha256=doc.storage_sha256)
+        if len(raw)!=doc.byte_count:raise DocumentIntegrityError('Stored document size mismatch')
+    except DocumentKeyUnavailable:
+        raise HTTPException(503,'Document decryption key unavailable') from None
+    except DocumentIntegrityError:
+        raise HTTPException(409,'Stored document failed integrity or ownership check') from None
     audit(db,id,user,'DOCUMENT_ACCESSED',detail={'document_id':doc.id})
     db.commit()
-    return FileResponse(stored,media_type=doc.media_type,filename=doc.filename,headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
+    from urllib.parse import quote
+    # Body is exactly the authenticated plaintext verified above; no file race after verification.
+    return Response(content=raw,media_type=doc.media_type,headers={
+        'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
+        'Content-Disposition':"attachment; filename*=UTF-8''"+quote(doc.filename,safe='')})
 
 @app.get('/api/v1/applications/{id}/assessment-diff')
 def assessment_diff(id:str,older_id:str|None=None,newer_id:str|None=None,

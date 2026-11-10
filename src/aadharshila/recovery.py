@@ -17,6 +17,7 @@ import zipfile
 from datetime import datetime, timezone
 from contextlib import closing
 from pathlib import Path
+from .secure_documents import storage_filename, FORMAT_ENCRYPTED, FORMAT_LEGACY
 
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 
@@ -25,13 +26,8 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def document_name(doc_id: str, media_type: str) -> str:
-    import uuid
-    uuid.UUID(doc_id)
-    suffix = '.pdf' if media_type == 'application/pdf' else '.txt' if media_type == 'text/plain' else None
-    if not suffix:
-        raise ValueError('Unsupported document media type in database')
-    return f'{doc_id}{suffix}'
+def document_name(doc_id: str, media_type: str, storage_format: str = FORMAT_LEGACY) -> str:
+    return storage_filename(doc_id, storage_format, media_type)
 
 
 def inspect_database(filename: Path):
@@ -39,12 +35,18 @@ def inspect_database(filename: Path):
         result = db.execute('PRAGMA integrity_check').fetchone()
         if not result or result[0] != 'ok':
             raise ValueError('Database integrity check failed')
-        rows = db.execute('SELECT id, path, media_type, byte_count, sha256 FROM documents').fetchall()
+        columns={row[1] for row in db.execute('PRAGMA table_info(documents)').fetchall()}
+        if {'storage_format','storage_sha256','encryption_key_id'}.issubset(columns):
+            rows=db.execute('SELECT id, path, media_type, byte_count, sha256, storage_format, storage_sha256, encryption_key_id FROM documents').fetchall()
+        else:
+            # Read-only compatibility for development backups from before encryption metadata.
+            old=db.execute('SELECT id, path, media_type, byte_count, sha256 FROM documents').fetchall()
+            rows=[(*row,FORMAT_LEGACY,row[4],None) for row in old]
         count = db.execute('SELECT count(*) FROM applications').fetchone()[0]
     return rows, count
 
 
-def source_document_path(path: str, doc_id: str, media_type: str, root: Path) -> Path:
+def source_document_path(path: str, doc_id: str, media_type: str, root: Path, storage_format: str = FORMAT_LEGACY) -> Path:
     source = Path(path)
     root = root.resolve()
     if source.is_absolute():
@@ -55,7 +57,7 @@ def source_document_path(path: str, doc_id: str, media_type: str, root: Path) ->
         candidate = (root / source).resolve()
         if candidate.is_file() and root in candidate.parents:
             return candidate
-    return root / document_name(doc_id, media_type)
+    return root / document_name(doc_id, media_type, storage_format)
 
 
 def backup_sqlite(database: Path, documents: Path, output: Path) -> dict:
@@ -71,22 +73,26 @@ def backup_sqlite(database: Path, documents: Path, output: Path) -> dict:
             target.commit()
         rows, applications = inspect_database(snapshot)
         db_bytes = snapshot.read_bytes()
-        manifest = {'format': 'aadharshila-sqlite-backup-v1',
+        manifest = {'format': ('aadharshila-sqlite-backup-v2' if any(row[5]==FORMAT_ENCRYPTED for row in rows)
+                               else 'aadharshila-sqlite-backup-v1'),
                     'created_at': datetime.now(timezone.utc).isoformat(),
                     'database_sha256': digest(db_bytes), 'application_count': applications,
-                    'documents': [], 'scope': 'DEVELOPMENT_SQLITE_ONLY'}
+                    'documents': [], 'scope': 'DEVELOPMENT_SQLITE_ONLY',
+                    'encryption_keys_included': False}
         output.parent.mkdir(parents=True, exist_ok=True)
         try:
             with zipfile.ZipFile(output, 'x', compression=zipfile.ZIP_DEFLATED) as archive:
                 archive.writestr('database.sqlite', db_bytes)
-                for doc_id, stored_path, media_type, count, expected in rows:
-                    filename = document_name(doc_id, media_type)
-                    source_path = source_document_path(stored_path, doc_id, media_type, documents)
+                for doc_id, stored_path, media_type, plain_count, plain_digest, storage_format, stored_digest, key_id in rows:
+                    filename = document_name(doc_id, media_type, storage_format)
+                    source_path = source_document_path(stored_path, doc_id, media_type, documents, storage_format)
                     raw = source_path.read_bytes()
-                    if len(raw) != count or digest(raw) != expected:
+                    expected_digest = stored_digest or plain_digest
+                    if digest(raw) != expected_digest or (storage_format==FORMAT_LEGACY and len(raw)!=plain_count):
                         raise ValueError(f'Invalid stored document: {doc_id}')
                     archive.writestr('documents/' + filename, raw)
-                    manifest['documents'].append({'name': filename, 'byte_count': count, 'sha256': expected})
+                    manifest['documents'].append({'name': filename, 'byte_count': len(raw), 'sha256': expected_digest,
+                        'storage_format':storage_format, 'plaintext_size':plain_count, 'plaintext_sha256':plain_digest})
                 archive.writestr('manifest.json', json.dumps(manifest, sort_keys=True, indent=2))
         except BaseException:
             output.unlink(missing_ok=True)
@@ -103,7 +109,7 @@ def validate_archive(archive: Path) -> tuple[dict, bytes, dict[str, bytes]]:
         if 'manifest.json' not in names or 'database.sqlite' not in names:
             raise ValueError('Not an Aadharshila SQLite backup')
         manifest = json.loads(package.read('manifest.json'))
-        if manifest.get('format') != 'aadharshila-sqlite-backup-v1':
+        if manifest.get('format') not in ('aadharshila-sqlite-backup-v1','aadharshila-sqlite-backup-v2'):
             raise ValueError('Unknown backup format')
         db_bytes = package.read('database.sqlite')
         if digest(db_bytes) != manifest.get('database_sha256'):
@@ -111,7 +117,9 @@ def validate_archive(archive: Path) -> tuple[dict, bytes, dict[str, bytes]]:
         checked = {}
         for doc in manifest['documents']:
             name = doc['name']
-            if Path(name).name != name or not name.endswith(('.pdf', '.txt')):
+            if Path(name).name != name or not name.endswith(('.pdf', '.txt', '.bin')):
+                raise ValueError('Invalid document archive path')
+            if name.endswith('.bin') and manifest['format']!='aadharshila-sqlite-backup-v2':
                 raise ValueError('Invalid document archive path')
             raw = package.read('documents/' + name)
             if digest(raw) != doc['sha256'] or len(raw) != doc['byte_count']:
@@ -141,10 +149,10 @@ def restore_sqlite(archive: Path, database: Path, documents: Path) -> dict:
         rows, count = inspect_database(temp_db)
         if count != manifest['application_count'] or len(rows) != len(document_bytes):
             raise ValueError('Restored database does not match manifest inventory')
-        for doc_id, _, media_type, byte_count, sha in rows:
-            name = document_name(doc_id, media_type)
+        for doc_id, _, media_type, byte_count, sha, storage_format, stored_digest, key_id in rows:
+            name = document_name(doc_id, media_type, storage_format)
             raw = (temp_docs / name).read_bytes()
-            if len(raw) != byte_count or digest(raw) != sha:
+            if digest(raw) != (stored_digest or sha) or (storage_format==FORMAT_LEGACY and len(raw)!=byte_count):
                 raise ValueError('Restored document failed database comparison')
         os.replace(temp_db, database)
         os.replace(temp_docs, documents)
