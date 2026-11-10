@@ -213,3 +213,13 @@ The extended workbench passed **91 local pytest tests** and `node --check web/ap
 New document uploads can use **AES-256-GCM with per-object random nonces, organization/application/document ownership binding, authenticated downloads and separate ciphertext checksums**. Configuration is optional only in local development and **mandatory for production uploads**. Production explicitly rejects legacy plaintext downloads. The SQLite development recovery tool preserves encrypted `.bin` objects without bundling decryption keys. The new Alembic revision is `8b49e2d0c121`. See [`docs/SECURE_DOCUMENT_STORAGE.md`](docs/SECURE_DOCUMENT_STORAGE.md) for keyring configuration, safe key rotation, restore behavior and limitations.
 
 This is **file-byte encryption only**: database fields and model snapshots require additional institutional data protection. No external key vault, production encrypted object storage, independent security audit, retention policy or regulated lender approval is included.
+
+## November 10 engineering hardening checkpoint
+
+The platform now supports process-isolated PDF extraction with bounded time and memory on supported POSIX systems; OIDC browser sign-in using authorization code and PKCE with MFA claim verification, short-lived revocable sessions and staff deactivation; extended transaction duplicate/transfer/coverage checks; and persisted lender-scoped policy impact simulations required before independent approval.
+
+For repeatable ML research, run `python -m aadharshila.synthetic_risk_benchmark --output-dir .risk-ci`. All sample outcomes are mathematically invented, never real borrower outcomes or an approved credit decision model. For a measured API benchmark, run `python scripts/http_benchmark.py --requests 60 --concurrency 6`. Browser smoke tests are in `scripts/browser_smoke.py` (requires `requirements-browser.txt` and installed Chromium); these were blocked locally by browser administrator restrictions and are scheduled for GitHub Actions verification.
+
+Private process-local metrics require `METRICS_ACCESS_TOKEN` and are served at `/internal/metrics`; never expose them without access controls. A deployment-oriented *example* is `infra/compose.production.example.yml`, which requires external PostgreSQL, signed authority, a lender IdP, restricted encryption keys, malware scanner, TLS, monitoring and security assessment. It is not a ready-to-run regulated deployment.
+
+Detailed implementation, measured checks, limitations and setup are recorded in [the engineering checkpoint](docs/ENGINEERING_RELEASE_2026-11-10.md).

@@ -1,0 +1,57 @@
+# Deployment illustration, NOT an approved production deployment.
+# Requires managed PostgreSQL/TLS/IdP/ClamAV/key vault and security review.
+services:
+  api:
+    image: ${AADHARSHILA_IMAGE:?Provide an internally reviewed immutable image reference}
+    command: ["uvicorn", "aadharshila.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "127.0.0.1"]
+    env_file: .env.production
+    environment:
+      APP_ENV: production
+      SEED_DEMO: "false"
+      UPLOAD_DIR: /app/var/documents
+    ports:
+      - "127.0.0.1:8080:8000"
+    volumes:
+      - secure_documents:/app/var/documents:rw
+      # Provision these externally, with uid 10001 access and mode 0600 for key material.
+      - ${DOCUMENT_KEYS_HOST_FILE:?}:/run/keys/documents.json:ro
+      - ${OIDC_JWKS_HOST_FILE:?}:/run/identity/jwks.json:ro
+      - scanner_socket:/run/clamav:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=128m
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    pids_limit: 128
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+    restart: on-failure:3
+  worker:
+    image: ${AADHARSHILA_IMAGE:?Provide an internally reviewed immutable image reference}
+    command: ["python", "-m", "aadharshila.worker"]
+    env_file: .env.production
+    environment:
+      APP_ENV: production
+      SEED_DEMO: "false"
+    volumes:
+      - secure_documents:/app/var/documents:rw
+      - ${DOCUMENT_KEYS_HOST_FILE:?}:/run/keys/documents.json:ro
+      - ${OIDC_JWKS_HOST_FILE:?}:/run/identity/jwks.json:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=128m
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 1g
+    restart: on-failure:3
+volumes:
+  secure_documents:
+  scanner_socket:
+    external: true
+# Reverse proxy, managed key service and scanner are external. This does not
+# constitute a comprehensive OS parser sandbox or guarantee zero PII leakage.

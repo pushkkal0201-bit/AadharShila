@@ -1,31 +1,34 @@
 """Aadharshila HTTP API and bundled local interface."""
-import os, json, re, hashlib, html, io, uuid, time, tempfile
+import os, json, re, hashlib, html, io, uuid, time, tempfile, hmac
 from contextlib import asynccontextmanager
 from pathlib import Path
-from datetime import datetime,timezone
+from datetime import datetime,timezone,timedelta
 from decimal import Decimal
 from fastapi import FastAPI, HTTPException, Depends, Request, Response, UploadFile, File, Header
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel,Field,field_validator,ValidationError
 from sqlalchemy import select,func,text as sqltext
 from sqlalchemy.orm import Session
 from .db import get_db,init_db,SessionLocal
-from .models import Application,User,Consent,Evidence,Policy,Assessment,Document,ReviewTask,Conflict,AuditEvent,Job,Participant,ProviderInvocation
-from .security import current_user,require,verify_password,token_for
+from .models import FederatedSession,PolicySimulation,Application,User,Consent,Evidence,Policy,Assessment,Document,ReviewTask,Conflict,AuditEvent,Job,Participant,ProviderInvocation
+from .security import current_user,require,verify_password,token_for,SECRET
 from .service import active_policy,build_assessment,bump,collect_snapshot,replay,audit
 from .engine import evaluate
 from .connectors import fetch_and_record, configured_adapter
 from .production_gate import evaluate_configured
 from .seed import seed
 from .income import TransactionBatch, reconcile
-from .documents_pipeline import clamav_scan, extract_pdf, DocumentSafetyError
+from .documents_pipeline import clamav_scan, DocumentSafetyError
+from .document_isolation import extract_pdf_isolated, IsolatedExtractionUnavailable
 from .secure_documents import (encrypt_document, decrypt_document, storage_filename,
     DocumentKeyUnavailable, DocumentIntegrityError, FORMAT_ENCRYPTED, FORMAT_LEGACY, encryption_key_status)
 from .sanction import preview as sanction_preview
 from .property_intelligence import PropertyReview, evaluate_property
 from .risk_monitor import population_stability_index
 from .compliance_controls import check_application, CONTROL_REGISTRY
+from .browser_sso import begin as start_browser_sso, consume_flow, exchange_authorization_code, new_opaque_session, BrowserSSOError
+from .observability import record as record_http, prometheus, snapshot as request_metrics
 
 ROOT=Path(__file__).resolve().parents[2]
 @asynccontextmanager
@@ -88,6 +91,8 @@ class ReviewRequest(BaseModel):
 class PolicyCreate(BaseModel):
     product:str
     config:dict
+class PolicyApprovalNote(BaseModel):
+    reason:str=Field(min_length=12,max_length=2000)
 class ScenarioRequest(BaseModel):
     principal:float|None=None
     tenure_months:int|None=None
@@ -140,12 +145,41 @@ def latest_assessment(db,app_id):
 
 def require_editor(user):require(user,{'BORROWER','ANALYST','COMPLIANCE','ADMIN'})
 
+@app.middleware('http')
+async def security_headers_and_metrics(request:Request,call_next):
+    started=time.perf_counter()
+    response=await call_next(request)
+    route=request.scope.get('route')
+    template=getattr(route,'path',None)
+    if template:
+        record_http(request.method,template,response.status_code,time.perf_counter()-started)
+    response.headers['X-Content-Type-Options']='nosniff'
+    response.headers['X-Frame-Options']='DENY'
+    response.headers['Referrer-Policy']='no-referrer'
+    response.headers['Permissions-Policy']='camera=(), microphone=(), geolocation=()'
+    response.headers['Content-Security-Policy']="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    if request.url.scheme=='https':response.headers['Strict-Transport-Security']='max-age=31536000; includeSubDomains'
+    if request.url.path.startswith('/api/') or request.url.path.startswith('/internal/'):
+        response.headers['Cache-Control']='no-store'
+    return response
+
+@app.get('/internal/metrics',include_in_schema=False)
+def private_metrics(request:Request):
+    token=os.getenv('METRICS_ACCESS_TOKEN','')
+    if len(token)<24:
+        raise HTTPException(503,'Metrics export is not enabled')
+    supplied=request.headers.get('X-Metrics-Token','')
+    if not hmac.compare_digest(supplied,token):
+        raise HTTPException(403,'Metrics authentication required')
+    return PlainTextResponse(prometheus(),media_type='text/plain; version=0.0.4')
+
 @app.get('/')
 def index():return FileResponse(WEB/'index.html')
 @app.get('/api/v1/meta')
 def meta():
     return {'name':'Aadharshila','demo_enabled':os.getenv('APP_ENV','development')=='development' and os.getenv('SEED_DEMO','true').lower()=='true',
-        'providers':'SIMULATED','real_sanction':False}
+        'providers':'SIMULATED','real_sanction':False,
+        'sso_enabled':bool(os.getenv('OIDC_AUTHORIZATION_ENDPOINT'))}
 
 @app.get('/health/live')
 def live():return {'status':'UP'}
@@ -167,13 +201,72 @@ def login(body:Login,response:Response,db:Session=Depends(get_db)):
     csrf=uuid.uuid4().hex
     response.set_cookie('aadharshila_csrf',csrf,secure=secure,samesite='lax',max_age=28800)
     return {'user':{'username':user.username,'role':user.role},'csrf':csrf}
+@app.get('/api/v1/auth/oidc/start')
+def oidc_start():
+    try:
+        url,flow_cookie=start_browser_sso(SECRET)
+    except BrowserSSOError as exc:
+        raise HTTPException(503,str(exc)) from None
+    response=RedirectResponse(url,status_code=302)
+    response.set_cookie('aadharshila_oidc_flow',flow_cookie,httponly=True,
+                        secure=os.getenv('APP_ENV')=='production',samesite='lax',max_age=300,path='/api/v1/auth/oidc')
+    response.headers['Cache-Control']='no-store'
+    return response
+
+@app.get('/api/v1/auth/oidc/callback')
+def oidc_callback(request:Request,code:str|None=None,state:str|None=None,db:Session=Depends(get_db)):
+    try:
+        if not code or not state:raise BrowserSSOError('OIDC callback missing code or state')
+        flow=consume_flow(request.cookies.get('aadharshila_oidc_flow'),state,SECRET)
+        claims,ttl=exchange_authorization_code(code,flow['verifier'],flow['nonce'])
+        user=db.scalar(select(User).where(User.oidc_subject==claims['sub'],User.active.is_(True)))
+        if user is None:raise BrowserSSOError('Identity requires prior lender provisioning')
+        token,token_hash=new_opaque_session()
+        db.add(FederatedSession(token_hash=token_hash,user_id=user.id,
+            expires_at=datetime.now(timezone.utc)+timedelta(seconds=ttl)))
+        db.commit()
+    except BrowserSSOError as exc:
+        raise HTTPException(401,str(exc)) from None
+    response=RedirectResponse('/',status_code=303)
+    response.delete_cookie('aadharshila_oidc_flow',path='/api/v1/auth/oidc')
+    response.set_cookie('aadharshila_session',token,httponly=True,
+        secure=os.getenv('APP_ENV')=='production',samesite='lax',max_age=ttl)
+    response.set_cookie('aadharshila_csrf',uuid.uuid4().hex,
+        secure=os.getenv('APP_ENV')=='production',samesite='lax',max_age=ttl)
+    response.headers['Cache-Control']='no-store'
+    return response
+
 @app.post('/api/v1/auth/logout')
-def logout(response:Response,user:User=Depends(current_user)):
+def logout(response:Response,request:Request,db:Session=Depends(get_db),user:User=Depends(current_user)):
+    cookie=request.cookies.get('aadharshila_session','')
+    if cookie.startswith('fs_'):
+        session=db.get(FederatedSession,hashlib.sha256(cookie.encode()).hexdigest())
+        if session and session.user_id==user.id:
+            session.revoked_at=datetime.now(timezone.utc);db.commit()
     response.delete_cookie('aadharshila_session');response.delete_cookie('aadharshila_csrf')
     return {'ok':True}
 @app.get('/api/v1/auth/me')
 def me(user:User=Depends(current_user)):
     return {'id':user.id,'username':user.username,'role':user.role}
+
+@app.post('/api/v1/users/{user_id}/deactivate')
+def deactivate_user(user_id:str,request:Request,db:Session=Depends(get_db),actor:User=Depends(current_user)):
+    require(actor,{'ADMIN'})
+    if user_id==actor.id:raise HTTPException(409,'Cannot deactivate your own administrator account')
+    target=db.scalar(select(User).where(User.id==user_id,User.org_id==actor.org_id))
+    if not target:raise HTTPException(404,'User not found')
+    target.active=False
+    for sess in db.scalars(select(FederatedSession).where(FederatedSession.user_id==target.id,
+                      FederatedSession.revoked_at.is_(None))).all():
+        sess.revoked_at=datetime.now(timezone.utc)
+    db.add(AuditEvent(actor_id=actor.id,role=actor.role,action='USER_DEACTIVATED',detail={'user_id':target.id}))
+    db.commit()
+    return {'status':'DEACTIVATED','sessions_revoked':True}
+
+@app.get('/api/v1/operations/http-metrics')
+def staff_http_metrics(user:User=Depends(current_user)):
+    require(user,{'ADMIN','AUDITOR','COMPLIANCE'})
+    return {'process_local':True,'contains_borrower_identifiers':False,'items':request_metrics()}
 
 @app.get('/api/v1/applications')
 def list_applications(limit:int=50,offset:int=0,db:Session=Depends(get_db),user:User=Depends(current_user)):
@@ -406,6 +499,16 @@ def policies(db:Session=Depends(get_db),user:User=Depends(current_user)):
     rows=db.scalars(select(Policy).where(Policy.org_id==user.org_id).order_by(Policy.product,Policy.version)).all()
     return {'items':[{'id':p.id,'product':p.product,'version':p.version,'state':p.state,'config':p.config,'author_id':p.author_id,'approver_id':p.approver_id} for p in rows]}
 
+def policy_config_digest(config):
+    return hashlib.sha256(json.dumps(config,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+
+def policy_simulation_for_approval(db,policy):
+    simulations=db.scalars(select(PolicySimulation).where(
+        PolicySimulation.policy_id==policy.id,PolicySimulation.org_id==policy.org_id
+    ).order_by(PolicySimulation.created_at.desc(),PolicySimulation.id.desc())).all()
+    digest=policy_config_digest(policy.config)
+    return next((s for s in simulations if s.policy_sha256==digest and s.report.get('evaluated',0)>0),None)
+
 def policy_for_user(db,id,user):
     policy=db.scalar(select(Policy).where(Policy.id==id,Policy.org_id==user.org_id))
     if policy is None:raise HTTPException(404,'Policy not found')
@@ -431,6 +534,7 @@ def create_policy(body:PolicyCreate,db:Session=Depends(get_db),user:User=Depends
 @app.post('/api/v1/policies/{id}/validate')
 def validate_policy(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
     require(user,{'POLICY_AUTHOR','ADMIN'});p=policy_for_user(db,id,user)
+    if p.state!='DRAFT':raise HTTPException(409,'Only a draft may be validated')
     validate_policy_config(p.config);p.state='VALIDATED';db.commit();return {'state':p.state}
 @app.post('/api/v1/policies/{id}/simulate')
 def simulate_policy(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
@@ -445,19 +549,59 @@ def simulate_policy(id:str,db:Session=Depends(get_db),user:User=Depends(current_
             out=evaluate(prev.snapshot['input'],{**p.config,'version':p.version})
             old[prev.outcome]+=1;new[out['outcome']]+=1
             if prev.outcome!=out['outcome']:changes.append({'reference':row.reference,'old':prev.outcome,'new':out['outcome']})
-    return {'product':p.product,'version':p.version,'original_counts':old,'simulated_counts':new,'changes':changes,'evaluated':sum(old.values()),'note':'Synthetic portfolio, no original decisions modified.'}
+    report={'product':p.product,'version':p.version,'original_counts':old,'simulated_counts':new,
+            'changes':changes,'evaluated':sum(old.values()),
+            'note':'Synthetic portfolio, no original decisions modified.'}
+    record=PolicySimulation(org_id=user.org_id,policy_id=p.id,actor_id=user.id,
+                            policy_sha256=policy_config_digest(p.config),report=report)
+    db.add(record)
+    db.add(AuditEvent(actor_id=user.id,role=user.role,action='POLICY_SIMULATED',
+                      detail={'policy_id':p.id,'simulation_id':record.id,'policy_sha256':record.policy_sha256}))
+    db.commit()
+    return {**report,'simulation_id':record.id,'policy_sha256':record.policy_sha256}
 @app.post('/api/v1/policies/{id}/approve')
-def approve_policy(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
+def approve_policy(id:str,body:PolicyApprovalNote,db:Session=Depends(get_db),user:User=Depends(current_user)):
     require(user,{'POLICY_APPROVER','ADMIN'});p=policy_for_user(db,id,user)
-    if p.state!='VALIDATED' or p.author_id==user.id:raise HTTPException(409,'Validation and separation of duties required')
-    p.state='APPROVED';p.approver_id=user.id;db.commit();return {'state':p.state}
+    if p.state!='VALIDATED' or p.author_id==user.id:
+        raise HTTPException(409,'Validation and separation of duties required')
+    simulation=policy_simulation_for_approval(db,p)
+    if simulation is None:raise HTTPException(409,'Current policy must have a completed portfolio simulation')
+    if simulation.actor_id==user.id:raise HTTPException(409,'Independent simulation and approval required')
+    p.state='APPROVED';p.approver_id=user.id
+    db.add(AuditEvent(actor_id=user.id,role=user.role,action='POLICY_APPROVED',
+         reason=body.reason,detail={'policy_id':p.id,'simulation_id':simulation.id,'policy_sha256':simulation.policy_sha256}))
+    db.commit();return {'state':p.state,'simulation_id':simulation.id}
 @app.post('/api/v1/policies/{id}/activate')
-def activate_policy(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
+def activate_policy(id:str,body:PolicyApprovalNote,db:Session=Depends(get_db),user:User=Depends(current_user)):
     require(user,{'POLICY_APPROVER','ADMIN'});p=policy_for_user(db,id,user)
     if p.state!='APPROVED' or p.approver_id!=user.id:raise HTTPException(409,'Approved policy required')
     for prior in db.scalars(select(Policy).where(Policy.org_id==user.org_id,Policy.product==p.product,Policy.state=='ACTIVE')).all():prior.state='RETIRED'
     db.flush()  # Retire the previous active policy before activating the new one.
-    p.state='ACTIVE';db.commit();return {'state':p.state}
+    if policy_simulation_for_approval(db,p) is None:
+        raise HTTPException(409,'Matching preapproval simulation no longer exists')
+    p.state='ACTIVE'
+    db.add(AuditEvent(actor_id=user.id,role=user.role,action='POLICY_ACTIVATED',reason=body.reason,
+                      detail={'policy_id':p.id,'version':p.version,'product':p.product}))
+    db.commit();return {'state':p.state}
+
+@app.get('/api/v1/policies/{id}/simulations')
+def policy_simulations(id:str,db:Session=Depends(get_db),user:User=Depends(current_user)):
+    require(user,{'ANALYST','COMPLIANCE','POLICY_AUTHOR','POLICY_APPROVER','AUDITOR','ADMIN'})
+    p=policy_for_user(db,id,user)
+    records=db.scalars(select(PolicySimulation).where(PolicySimulation.policy_id==p.id,
+             PolicySimulation.org_id==user.org_id).order_by(PolicySimulation.created_at.desc()).limit(50)).all()
+    return {'items':[{'id':x.id,'policy_sha256':x.policy_sha256,'created_at':x.created_at.isoformat(),
+                      'actor_id':x.actor_id,'report':x.report} for x in records]}
+
+@app.get('/api/v1/operations/governance-audit')
+def governance_audit(db:Session=Depends(get_db),user:User=Depends(current_user)):
+    require(user,{'POLICY_AUTHOR','POLICY_APPROVER','COMPLIANCE','AUDITOR','ADMIN'})
+    rows=db.scalars(select(AuditEvent).join(User,AuditEvent.actor_id==User.id).where(
+        User.org_id==user.org_id,AuditEvent.application_id.is_(None),
+        AuditEvent.action.in_(['POLICY_SIMULATED','POLICY_APPROVED','POLICY_ACTIVATED','USER_DEACTIVATED'])
+    ).order_by(AuditEvent.timestamp.desc(),AuditEvent.id.desc()).limit(100)).all()
+    return {'items':[{'action':r.action,'timestamp':r.timestamp.isoformat(),
+            'role':r.role,'reason':r.reason,'detail':r.detail} for r in rows]}
 
 @app.get('/api/v1/operations/readiness')
 def production_readiness(db:Session=Depends(get_db),user:User=Depends(current_user)):
@@ -587,7 +731,10 @@ async def upload_document(id:str,file:UploadFile=File(...),db:Session=Depends(ge
     if os.getenv('APP_ENV','development')=='production' and scan_result!='CLEAN':
         raise HTTPException(503,'Production document upload requires functioning malware scanner')
     if is_pdf:
-        extracted=extract_pdf(raw,ocr_enabled=os.getenv('ENABLE_DOCUMENT_OCR','false').lower()=='true')
+        try:
+            extracted=extract_pdf_isolated(raw,ocr_enabled=os.getenv('ENABLE_DOCUMENT_OCR','false').lower()=='true')
+        except IsolatedExtractionUnavailable as exc:
+            raise HTTPException(503,str(exc)) from None
         text_output=extracted.get('text','');status=extracted['status']
         fields={'signature_check':extracted['signature'],'ocr_status':extracted['ocr'],
                 'page_count':extracted.get('page_count')}

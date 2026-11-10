@@ -85,11 +85,13 @@ def test_policy_separation_of_duties(client,login):
     pid=draft.json()['id']
     validate=client.post('/api/v1/policies/'+pid+'/validate',headers=h)
     assert validate.status_code==200
-    assert client.post('/api/v1/policies/'+pid+'/approve',headers=h).status_code==403
+    assert client.post('/api/v1/policies/'+pid+'/approve',headers=h,json={'reason':'Author cannot approve their own policy'}).status_code==403
+    simulation=client.post('/api/v1/policies/'+pid+'/simulate',headers=h)
+    assert simulation.status_code==200,simulation.text
     h=login('policy_approver')
-    approve=client.post('/api/v1/policies/'+pid+'/approve',headers=h)
+    approve=client.post('/api/v1/policies/'+pid+'/approve',headers=h,json={'reason':'Reviewer approves simulated credit-policy outcome'})
     assert approve.status_code==200,approve.text
-    assert client.post('/api/v1/policies/'+pid+'/activate',headers=h).status_code==200
+    assert client.post('/api/v1/policies/'+pid+'/activate',headers=h,json={'reason':'Release approved following impact assessment'}).status_code==200
 
 def test_stale_job_superseded(cases,client,login):
     login('analyst')

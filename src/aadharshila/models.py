@@ -23,6 +23,15 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(40))
     active: Mapped[bool] = mapped_column(Boolean,default=True)
 
+class FederatedSession(Base):
+    __tablename__='federated_sessions'
+    token_hash: Mapped[str] = mapped_column(String(64),primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'),index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),default=now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True),nullable=True)
+
+
 class Application(Base):
     __tablename__="applications"
     id: Mapped[str] = mapped_column(String(36),primary_key=True,default=uid)
@@ -115,6 +124,17 @@ class Policy(Base):
         Index('uq_policies_one_active_per_org_product','org_id','product',unique=True,
               sqlite_where=text("state='ACTIVE'"),postgresql_where=text("state='ACTIVE'")),
     )
+
+class PolicySimulation(Base):
+    __tablename__='policy_simulations'
+    id: Mapped[str]=mapped_column(String(36),primary_key=True,default=uid)
+    org_id: Mapped[str]=mapped_column(ForeignKey('organizations.id'),index=True)
+    policy_id: Mapped[str]=mapped_column(ForeignKey('policies.id'),index=True)
+    actor_id: Mapped[str]=mapped_column(ForeignKey('users.id'))
+    policy_sha256: Mapped[str]=mapped_column(String(64))
+    report: Mapped[dict]=mapped_column(JSON)
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
+
 
 class Assessment(Base):
     __tablename__='assessments'
