@@ -4,6 +4,7 @@ Cryptographic verification is not proof of lender licensing or actual profession
 sign-off. Institution-managed public-key trust anchors are required.
 """
 from __future__ import annotations
+from .runtime import is_production
 import base64
 import hashlib
 import json
@@ -84,7 +85,7 @@ def evaluate_bundle(bundle:dict,trust_store:dict,*,organization_id:str,product:s
 def evaluate_configured(*,organization_id:str,product:str,policy:dict)->dict:
     empty={'valid':False,'requirements':{name:'NOT_ATTESTED' for name in REQUIREMENTS},
            'issues':[],'policy_sha256':policy_fingerprint(policy)}
-    if os.getenv('APP_ENV','development').lower()!='production':
+    if not is_production():
         return {**empty,'issues':['DEVELOPMENT_MODE']}
     bundle_file=os.getenv('AADHARSHILA_RELEASE_BUNDLE','')
     trust_file=os.getenv('AADHARSHILA_TRUST_STORE','')

@@ -1,4 +1,5 @@
 """Development authentication with signed HttpOnly sessions and cookie CSRF protection."""
+from .runtime import is_production
 import os, secrets, hashlib, hmac
 from datetime import datetime, timedelta, timezone
 import jwt
@@ -10,7 +11,7 @@ from .federated_auth import validate_federated_token, FederatedAuthenticationErr
 from sqlalchemy import select
 
 SECRET=os.getenv('SESSION_SECRET','development-only-secret-change-before-deploy')
-if os.getenv('APP_ENV','development')=='production':
+if is_production():
     forbidden={'development-only-secret-change-before-deploy','change-this-long-random-development-secret'}
     if SECRET in forbidden or len(SECRET)<32:
         raise RuntimeError('Configure a unique SESSION_SECRET of at least 32 characters in production')
@@ -47,7 +48,7 @@ def current_user(request:Request,db:Session=Depends(get_db)):
         if not session or session.revoked_at or expires<=datetime.now(timezone.utc):
             raise HTTPException(401,'Invalid or revoked browser session')
         user=db.get(User,session.user_id)
-    elif os.getenv('APP_ENV','development')=='production':
+    elif is_production():
         if not is_bearer:raise HTTPException(401,'Federated authentication required')
         try:claims=validate_federated_token(token)
         except FederatedAuthenticationError:

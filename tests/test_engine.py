@@ -46,3 +46,46 @@ def test_no_permission_refers():
 def test_self_reported_never_autoverified():
     s=base();s['evidence']['bank_income']={'verification':'UNRESOLVED','value':{'amount':100000},'mode':'SELF_REPORTED'}
     assert evaluate(s,POLICY)['outcome']=='REFER'
+
+def test_tiny_foir_breach_does_not_round_to_approval():
+    case=base()
+    case['application'].update(amount='100000.01',tenure_months=1,existing_obligations=0)
+    case['evidence']['bank_income']['value']['amount']=200000
+    case['evidence']['income_support']['value']['amount']=200000
+    policy={**POLICY,'annual_rate_percent':0}
+    result=evaluate(case,policy)
+    assert result['financials']['foir']==0.5  # UI rounds to four places
+    assert result['outcome']=='REJECT'
+    assert any(r['code']=='FOIR_EXCEEDED' and r['status']=='FAIL' for r in result['reasons'])
+
+
+def test_tiny_ltv_breach_does_not_round_to_approval():
+    case=base()
+    case['application'].update(amount='160000.01',property_value=200000)
+    case['evidence']['valuation']['value']['amount']=200000
+    result=evaluate(case,POLICY)
+    assert result['financials']['ltv']==0.8
+    assert result['outcome']=='REJECT'
+    assert any(r['code']=='LTV_EXCEEDED' and r['status']=='FAIL' for r in result['reasons'])
+
+
+def test_negative_obligations_fail_closed():
+    case=base()
+    case['application']['existing_obligations']=-1
+    result=evaluate(case,POLICY)
+    assert result['outcome']=='REFER'
+    assert any(r['code']=='INVALID_FINANCIALS' for r in result['reasons'])
+
+
+def test_production_untrusted_optional_obligations_require_review():
+    case=base()
+    case['operating_mode']='PRODUCTION'
+    case['production_authorization']={'valid':True}
+    for value in case['evidence'].values():
+        value.update(mode='LIVE',live_authenticated=True)
+    case['evidence']['obligations']={'verification':'VERIFIED',
+          'value':{'amount':2000},'expired':False,'mode':'SIMULATED'}
+    result=evaluate(case,POLICY)
+    assert result['outcome']=='REFER'
+    assert any(r['code']=='NONLIVE_EVIDENCE' and 'obligations' in r['explanation']
+               for r in result['reasons'])

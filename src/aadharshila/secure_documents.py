@@ -6,6 +6,7 @@ This is an at-rest control, not a substitute for secure object storage, TLS,
 separate key custody, retention governance, or independent security assessment.
 """
 from __future__ import annotations
+from .runtime import is_production
 import base64
 import hashlib
 import json
@@ -57,7 +58,7 @@ def _keys() -> dict[str, bytes]:
         raise DocumentKeyUnavailable('Institution document keyring is not configured')
     try:
         source = Path(key_path)
-        if os.getenv('APP_ENV', 'development') == 'production' and os.name == 'posix':
+        if is_production() and os.name == 'posix':
             # A vault mount can be read-only; it must not be group/world-accessible.
             if source.stat().st_mode & 0o077:
                 raise ValueError('Insecure institution keyring filesystem permissions')
@@ -89,7 +90,7 @@ def encrypt_document(raw: bytes, org_id: str, application_id: str, document_id: 
     if not raw or len(raw) > MAX_DOCUMENT_BYTES:
         raise ValueError('Invalid document size')
     active = os.getenv('AADHARSHILA_DOCUMENT_ACTIVE_KEY_ID', '')
-    production = os.getenv('APP_ENV', 'development') == 'production'
+    production = is_production()
     if not active:
         if production:
             raise DocumentKeyUnavailable('Production requires document encryption key configuration')
@@ -109,7 +110,7 @@ def decrypt_document(stored: bytes, *, storage_format: str, key_id: str | None,
     if stored_sha256 and hashlib.sha256(stored).hexdigest() != stored_sha256:
         raise DocumentIntegrityError('Stored document checksum mismatch')
     if storage_format == FORMAT_LEGACY:
-        if os.getenv('APP_ENV', 'development') == 'production':
+        if is_production():
             raise DocumentKeyUnavailable('Unencrypted legacy documents require an approved migration')
         raw = stored
     elif storage_format == FORMAT_ENCRYPTED:

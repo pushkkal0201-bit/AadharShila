@@ -1,4 +1,5 @@
 """Aadharshila HTTP API and bundled local interface."""
+from .runtime import is_production
 import os, json, re, hashlib, html, io, uuid, time, tempfile, hmac
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -38,7 +39,7 @@ ROOT=Path(__file__).resolve().parents[2]
 @asynccontextmanager
 async def lifespan(application):
     init_db()
-    if os.getenv('APP_ENV','development')!='production' and os.getenv('SEED_DEMO','true').lower()=='true':
+    if not is_production() and os.getenv('SEED_DEMO','true').lower()=='true':
         with SessionLocal() as db:seed(db)
     yield
 
@@ -181,7 +182,7 @@ def private_metrics(request:Request):
 def index():return FileResponse(WEB/'index.html')
 @app.get('/api/v1/meta')
 def meta():
-    return {'name':'Aadharshila','demo_enabled':os.getenv('APP_ENV','development')=='development' and os.getenv('SEED_DEMO','true').lower()=='true',
+    return {'name':'Aadharshila','demo_enabled':not is_production() and os.getenv('SEED_DEMO','true').lower()=='true',
         'providers':'SIMULATED','real_sanction':False,
         'sso_enabled':bool(os.getenv('OIDC_AUTHORIZATION_ENDPOINT'))}
 
@@ -195,12 +196,12 @@ def ready(db:Session=Depends(get_db)):
 
 @app.post('/api/v1/auth/login')
 def login(body:Login,response:Response,db:Session=Depends(get_db)):
-    if os.getenv('APP_ENV','development')=='production':
+    if is_production():
         raise HTTPException(403,'Local password login is disabled in production')
     user=db.scalar(select(User).where(User.username==body.username))
     if not user or not verify_password(body.password,user.password_hash) or not user.active:
         raise HTTPException(status_code=401,detail='Invalid credentials')
-    secure=os.getenv('APP_ENV','development')=='production'
+    secure=is_production()
     response.set_cookie('aadharshila_session',token_for(user),httponly=True,secure=secure,samesite='lax',max_age=28800)
     csrf=uuid.uuid4().hex
     response.set_cookie('aadharshila_csrf',csrf,secure=secure,samesite='lax',max_age=28800)
@@ -213,7 +214,7 @@ def oidc_start():
         raise HTTPException(503,str(exc)) from None
     response=RedirectResponse(url,status_code=302)
     response.set_cookie('aadharshila_oidc_flow',flow_cookie,httponly=True,
-                        secure=os.getenv('APP_ENV')=='production',samesite='lax',max_age=300,path='/api/v1/auth/oidc')
+                        secure=is_production(),samesite='lax',max_age=300,path='/api/v1/auth/oidc')
     response.headers['Cache-Control']='no-store'
     return response
 
@@ -234,9 +235,9 @@ def oidc_callback(request:Request,code:str|None=None,state:str|None=None,db:Sess
     response=RedirectResponse('/',status_code=303)
     response.delete_cookie('aadharshila_oidc_flow',path='/api/v1/auth/oidc')
     response.set_cookie('aadharshila_session',token,httponly=True,
-        secure=os.getenv('APP_ENV')=='production',samesite='lax',max_age=ttl)
+        secure=is_production(),samesite='lax',max_age=ttl)
     response.set_cookie('aadharshila_csrf',uuid.uuid4().hex,
-        secure=os.getenv('APP_ENV')=='production',samesite='lax',max_age=ttl)
+        secure=is_production(),samesite='lax',max_age=ttl)
     response.headers['Cache-Control']='no-store'
     return response
 
@@ -630,12 +631,12 @@ def production_readiness(db:Session=Depends(get_db),user:User=Depends(current_us
     all_signed=all(p.get('signed_attestations',{}).get('valid',False) for p in policies.values())
     return {'application':'Aadharshila','environment':os.getenv('APP_ENV','development'),
             'automatic_real_underwriting':('SIGNED_GOVERNANCE_PREREQUISITES_PRESENT'
-                if all_signed and os.getenv('APP_ENV')=='production' else 'BLOCKED_BY_GOVERNANCE_GATE'),
+                if all_signed and is_production() else 'BLOCKED_BY_GOVERNANCE_GATE'),
             'production_authorizations':policies.get('HOME_LOAN',{}).get('signed_attestations',{}).get('requirements',{}),
             'per_product':policies,
             'providers':providers,
-            'document_storage':{**encryption_key_status(), 'encryption_required':os.getenv('APP_ENV')=='production',
-                                'legacy_plaintext_allowed':os.getenv('APP_ENV','development')!='production'},
+            'document_storage':{**encryption_key_status(), 'encryption_required':is_production(),
+                                'legacy_plaintext_allowed':not is_production()},
             'note':'Signatures are checked against an institution-configured trust store. Licensing, legal competence, and production certification cannot be established by this software.'}
 
 @app.get('/api/v1/applications/{id}/compliance-checks')
@@ -707,7 +708,7 @@ def evidence_intelligence_demo(id:str,db:Session=Depends(get_db),user:User=Depen
     """Synthetic, fixed, local sample with transaction provenance explicitly marked demo."""
     require(user,{'ANALYST','COMPLIANCE','ADMIN'})
     a=load_app(db,id,user)
-    if os.getenv('APP_ENV','development')=='production':raise HTTPException(404,'Synthetic demo unavailable')
+    if is_production():raise HTTPException(404,'Synthetic demo unavailable')
     return {'sample':synthetic_case_batch(a.applicant_type).model_dump(mode='json'),
             'classification':'SYNTHETIC_ANALYST_INPUT',
             'note':'Generated only for a local judge demonstration. No bank provider is contacted.'}
@@ -739,7 +740,7 @@ class ResearchRiskDriftRequest(BaseModel):
 @app.get('/api/v1/research/risk-model/status')
 def risk_model_research_status(user:User=Depends(current_user)):
     require(user,{'ANALYST','COMPLIANCE','AUDITOR','ADMIN'})
-    if os.getenv('APP_ENV','development')=='production':
+    if is_production():
         raise HTTPException(404,'Research model preview is unavailable')
     try:return research_model_status()
     except ResearchModelUnavailable as exc:
@@ -749,7 +750,7 @@ def risk_model_research_status(user:User=Depends(current_user)):
 @app.post('/api/v1/research/risk-model/preview')
 def risk_model_research_preview(body:ResearchRiskPreviewRequest,user:User=Depends(current_user)):
     require(user,{'ANALYST','COMPLIANCE','ADMIN'})
-    if os.getenv('APP_ENV','development')=='production':
+    if is_production():
         raise HTTPException(404,'Research model preview is unavailable')
     try:return research_model_preview(body.features)
     except ResearchModelUnavailable as exc:raise HTTPException(503,str(exc))
@@ -758,7 +759,7 @@ def risk_model_research_preview(body:ResearchRiskPreviewRequest,user:User=Depend
 @app.post('/api/v1/research/risk-model/drift')
 def risk_model_research_drift(body:ResearchRiskDriftRequest,user:User=Depends(current_user)):
     require(user,{'ANALYST','COMPLIANCE','AUDITOR','ADMIN'})
-    if os.getenv('APP_ENV','development')=='production':
+    if is_production():
         raise HTTPException(404,'Research model preview is unavailable')
     try:return research_drift(body.rows)
     except ResearchModelUnavailable as exc:raise HTTPException(503,str(exc))
@@ -794,7 +795,7 @@ async def upload_document(id:str,file:UploadFile=File(...),db:Session=Depends(ge
         scan_result=clamav_scan(raw)
     except DocumentSafetyError as exc:
         raise HTTPException(422 if str(exc)=='MALWARE_DETECTED' else 503,str(exc))
-    if os.getenv('APP_ENV','development')=='production' and scan_result!='CLEAN':
+    if is_production() and scan_result!='CLEAN':
         raise HTTPException(503,'Production document upload requires functioning malware scanner')
     if is_pdf:
         try:
@@ -816,7 +817,7 @@ async def upload_document(id:str,file:UploadFile=File(...),db:Session=Depends(ge
         secured=encrypt_document(raw,a.org_id,a.id,document_id)
     except DocumentKeyUnavailable:
         raise HTTPException(503,'Document encryption key configuration unavailable') from None
-    if os.getenv('APP_ENV','development')=='production':
+    if is_production():
         text_output=''
         fields={k:v for k,v in fields.items() if k in ('signature_check','ocr_status','page_count','parse_error')}
     destination=UPLOADS/storage_filename(document_id,secured.storage_format,media)

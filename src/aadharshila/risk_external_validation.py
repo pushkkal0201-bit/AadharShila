@@ -137,7 +137,8 @@ def evaluate_external(artifact_file: Path, *, expected_artifact_sha256: str, dat
         raise ValueError('Evaluation cohort missing columns: ' + str(sorted(needed-set(frame.columns))))
     if len(frame) < (100 if manifest['synthetic'] else 300):
         raise ValueError('External evaluation cohort is too small for the configured research protocol')
-    if frame[id_key].isna().any() or frame[id_key].astype(str).str.strip().eq('').any() or frame[id_key].duplicated().any():
+    borrower_ids=frame[id_key].astype('string').str.strip()
+    if borrower_ids.isna().any() or borrower_ids.eq('').any() or borrower_ids.duplicated().any():
         raise ValueError('Evaluation cohort has missing or repeated borrower IDs')
     dates = pd.to_datetime(frame[date_key], utc=True, errors='coerce')
     if dates.isna().any():
@@ -157,6 +158,8 @@ def evaluate_external(artifact_file: Path, *, expected_artifact_sha256: str, dat
     if min(counts) < 10:
         raise ValueError('Insufficient event/non-event representation in the evaluation cohort')
     matrix = frame[features].apply(pd.to_numeric, errors='coerce')
+    if (frame[features].notna() & matrix.isna()).to_numpy().any():
+        raise ValueError('Non-numeric evaluation feature is not a missing observation')
     if np.isinf(matrix.to_numpy()).any():
         raise ValueError('Infinite feature values are not supported')
     if matrix.isna().all(axis=0).any():

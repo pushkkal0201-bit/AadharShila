@@ -19,6 +19,16 @@ The Windows setup script installs `requirements-ml.txt` so the full suite can im
 
 **Pass condition:** pytest completes without failures or errors. A few deliberate skips and deprecation warnings do not necessarily indicate a failure. Do not quote a historical test count as the result of a new run.
 
+### Focused financial, ML and deployment tests
+
+For the new precision, data-quality and deployment-mode regressions:
+
+```bat
+.venv\Scripts\python.exe -m pytest -q tests\test_engine.py tests\test_finance.py tests\test_environment_boundary.py tests\test_full_ml_pipeline.py tests\test_risk_external_validation.py
+```
+
+The boundary tests verify that a displayed FOIR/LTV exactly on a limit still fails when the underlying amount exceeds it, an untrusted obligation assertion cannot satisfy a restricted-environment assessment, malformed training rows are rejected, and non-development `APP_ENV` values cannot enable demo login or synthetic risk preview.
+
 ## 2. Standard underwriting walkthrough
 
 ```bat

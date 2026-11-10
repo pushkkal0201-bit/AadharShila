@@ -27,6 +27,8 @@ def principal_for_emi(monthly_emi,annual_rate_percent,months):
     return cash(cap*(z-1)/(m*z))
 def metrics(principal,annual_rate_percent,months,monthly_income,existing_obligations,property_value):
     p, inc,ob,collateral=D(principal),D(monthly_income),D(existing_obligations),D(property_value)
+    if any(value < 0 for value in (p, inc, ob, collateral)):
+        raise ValueError('Financial amounts and obligations must be nonnegative')
     payment=emi(p,annual_rate_percent,months)
     total=payment*D(months)
     return {
@@ -57,7 +59,9 @@ def stress(principal,rate,tenure,income,obligations,property_value,policy):
     out=[]
     for name,(i,r,v) in scenarios.items():
         m=metrics(principal,r,tenure,i,obligations,v)
-        outcome=('PASS' if m['foir'] is not None and m['ltv'] is not None and
-                 m['foir']<=policy['max_foir'] and m['ltv']<=policy['max_ltv'] else 'FAIL')
+        # Compare the unrounded ratios. Display rounding must never change a policy result.
+        outcome=('PASS' if i>0 and v>0 and
+                 D(m['emi'])+D(obligations)<=i*D(policy['max_foir']) and
+                 D(principal)<=v*D(policy['max_ltv']) else 'FAIL')
         out.append({'scenario':name,**m,'policy_result':outcome})
     return out
