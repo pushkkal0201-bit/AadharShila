@@ -100,8 +100,24 @@ def evaluate(snapshot, policy):
             conflicts.append({'code':'PROPERTY_CONTRADICTION','declared':float(declared),'accepted':float(property_value),'severity':'BLOCKING','sources':['borrower','valuation']})
             check('PROPERTY_CONTRADICTION','UNRESOLVED','conflict')
     obligations=D(app['existing_obligations'])
-    if ev.get('obligations') and ev['obligations'].get('verification')=='VERIFIED' and not ev['obligations'].get('expired',False):
-        obligations=max(obligations,D(ev['obligations']['value'].get('amount',0)))
+    obligation_evidence=ev.get('obligations')
+    if obligation_evidence:
+        authorized_source=(not production or
+                           (obligation_evidence.get('mode')=='LIVE' and
+                            obligation_evidence.get('live_authenticated') is True))
+        if not authorized_source:
+            check('NONLIVE_EVIDENCE','UNRESOLVED','provenance',
+                  'obligations requires an authenticated live source')
+        if (authorized_source and obligation_evidence.get('verification')=='VERIFIED' and
+                not obligation_evidence.get('expired',False)):
+            try:
+                reported_obligations=D(obligation_evidence['value']['amount'])
+                if reported_obligations < 0:
+                    raise ValueError('Negative obligations')
+                obligations=max(obligations,reported_obligations)
+            except (KeyError,TypeError,ValueError,ArithmeticError):
+                check('INVALID_FINANCIALS','UNRESOLVED','financial',
+                      'Verified obligation evidence is not a nonnegative amount')
     if transaction_result:
         obligations=max(obligations,D(transaction_result['observed_monthly_obligations']))
     try:
@@ -114,8 +130,12 @@ def evaluate(snapshot, policy):
             check('INCOME_BELOW_MIN','FAIL' if accepted_income<D(policy['min_income']) else 'PASS','policy')
         else:
             check('INCOME_BELOW_MIN','UNRESOLVED','policy')
-        check('FOIR_EXCEEDED','FAIL' if fin['foir'] is not None and fin['foir']>policy['max_foir'] else ('UNRESOLVED' if fin['foir'] is None else 'PASS'),'policy')
-        check('LTV_EXCEEDED','FAIL' if fin['ltv'] is not None and fin['ltv']>policy['max_ltv'] else ('UNRESOLVED' if fin['ltv'] is None else 'PASS'),'policy')
+        # Ratios in the response are rounded for display; credit decisions use exact
+        # decimal comparisons so a small policy breach cannot round into a PASS.
+        check('FOIR_EXCEEDED', 'UNRESOLVED' if fin['foir'] is None else
+              ('FAIL' if D(fin['emi'])+obligations>accepted_income*D(policy['max_foir']) else 'PASS'),'policy')
+        check('LTV_EXCEEDED', 'UNRESOLVED' if fin['ltv'] is None else
+              ('FAIL' if D(app['amount'])>property_value*D(policy['max_ltv']) else 'PASS'),'policy')
         if app['tenure_months']>policy['max_tenure_months']:
             check('TENURE_EXCEEDED','FAIL','policy','Tenure exceeds configured policy maximum.')
         offer=alternative(app['amount'],policy['annual_rate_percent'],app['tenure_months'],accepted_income,obligations,property_value,policy['max_foir'],policy['max_ltv'],policy['max_tenure_months'])
