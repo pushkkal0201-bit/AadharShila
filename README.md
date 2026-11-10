@@ -565,6 +565,17 @@ Visit `http://127.0.0.1:8000`, choose **Credit analyst → Risk model laboratory
 
 **Validation boundary:** A generated model score describes an artificial label. It is neither a real probability of mortgage default nor an underwriting recommendation. Actual assessments continue to use the versioned deterministic evidence-and-policy engine. Model preview and drift endpoints are unavailable in production mode.
 
+### Independent-date model evaluation (research only)
+
+The calibrated model can now be evaluated **offline** against a separately supplied, strictly later cohort. The evaluation checks cohort provenance declarations, 12-month outcome maturity for real records, data leakage boundaries, class coverage and feature schema. It reports discrimination, calibration, bootstrap uncertainty intervals, a training-prevalence baseline, predictor drift and stable subgroup summaries. **It does not permit real loan decisions or certify a dataset.**
+
+```bash
+python -m aadharshila.synthetic_risk_benchmark --output-dir .risk-ci --seed 42 --rows 640
+python -m aadharshila.risk_validation_demo --artifact .risk-ci/research_model.json --output-dir .risk-ci/independent --seed 99 --rows 300
+```
+
+Both commands above use invented rows and labels. For authorized real-data validation, an independently evaluated real-data-trained candidate, a separately supplied matured mortgage outcome cohort and formal dataset permissions are required. See [independent model validation](docs/hackathon/INDEPENDENT_MODEL_VALIDATION.md), including the data manifest, leakage controls and report commands. No real mortgage outcome dataset has been obtained for this repository.
+
 ## Technology stack
 
 | Layer | Technology | Responsibility |

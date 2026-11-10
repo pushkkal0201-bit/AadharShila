@@ -48,16 +48,25 @@ def load_pinned_research_model() -> tuple[dict, str]:
         raise ResearchModelUnavailable('Research artifact cannot be read') from exc
 
 
-def validate_research_artifact(a: Any) -> None:
+def validate_research_artifact(a: Any, *, allow_external_offline: bool = False) -> None:
     if not isinstance(a,dict) or a.get('artifact_format')!=ARTIFACT_VERSION:
         raise ResearchModelUnavailable('Unsupported research artifact format')
     report=a.get('evaluation',{})
-    if not isinstance(report,dict) or report.get('synthetic') is not True or report.get('deployment_status')!='NOT_AUTHORIZED' or report.get('capability')!='SYNTHETIC_EVALUATION_ONLY':
-        raise ResearchModelUnavailable('Only non-authorized synthetic research models are allowed')
+    if not isinstance(report,dict) or report.get('deployment_status')!='NOT_AUTHORIZED':
+        raise ResearchModelUnavailable('Research model must remain not authorized for deployment')
+    if report.get('synthetic') is True and report.get('capability')=='SYNTHETIC_EVALUATION_ONLY':
+        pass
+    elif (allow_external_offline and report.get('synthetic') is False and
+          report.get('capability')=='EXTERNAL_DATA_EVALUATION_PENDING_INDEPENDENT_REVIEW'):
+        pass
+    else:
+        raise ResearchModelUnavailable('Only non-authorized synthetic research models are allowed in the application')
     if not isinstance(a.get('parameter_sha256'),str) or len(a['parameter_sha256'])!=64:
         raise ResearchModelUnavailable('Model parameter fingerprint missing')
     keys=a.get('features')
-    if not isinstance(keys,list) or len(keys)!=len(DEFAULT_FEATURES) or set(keys)!=set(DEFAULT_FEATURES):
+    if (not isinstance(keys,list) or not keys or len(keys)!=len(set(keys)) or
+        not set(keys).issubset(DEFAULT_FEATURES) or
+        (not allow_external_offline and len(keys)!=len(DEFAULT_FEATURES))):
         raise ResearchModelUnavailable('Research model feature contract mismatch')
     for field in ['imputation_medians','scale_means','scale_stds','weights']:
         vals=a.get(field)
