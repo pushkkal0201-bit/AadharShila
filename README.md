@@ -10,12 +10,41 @@ Aadharshila evaluates mortgage applications against consent-bound evidence, fina
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](docker-compose.yml)
 [![Demo](https://img.shields.io/badge/Data-Synthetic%20only-6B7280)](data/MANIFEST.md)
 
-**[Problem](#the-problem)** · **[Who and when](#who-uses-it-and-when)** · **[Demo](#six-minute-judge-walkthrough)** · **[Innovation](#what-makes-the-implementation-different)** · **[Architecture](#system-architecture)** · **[Workflow](#underwriting-workflow)** · **[Stack](#technology-stack)** · **[Setup](#installation-and-local-setup)** · **[API](#api-usage)** · **[Tests](#testing-and-verification)** · **[Security](#security-trust-boundaries-and-production-scope)**
+**[Problem](#the-problem)** · **[Users](#who-uses-it-and-when)** · **[Live walkthrough](#six-minute-judge-walkthrough)** · **[Design](#what-makes-the-implementation-different)** · **[Workflow](#underwriting-workflow)** · **[Architecture](#system-architecture)** · **[Tech stack](#technology-stack)** · **[Run locally](#installation-and-local-setup)** · **[API](#api-usage)** · **[Verification](#testing-and-verification)** · **[Security](#security-trust-boundaries-and-production-scope)**
 
 > [!IMPORTANT]
 > **Local engineering demonstration, not a lending service.** The borrowers, financial records, provider assertions, and credit policies in this repository are synthetic or illustrative. `APPROVE`, `REFER`, and `REJECT` describe **demonstration underwriting decisions**. No live KYC, credit bureau, Account Aggregator, property-registry, lender-sanction, or disbursement service is connected. The offline ML research model is not used to approve loans.
 
 ---
+
+## Choose a path
+
+<table>
+  <tr>
+    <td width="33%" align="center"><a href="#six-minute-judge-walkthrough"><strong>▶ See the decision</strong></a><br/><sub>Six-minute judge walkthrough · AS-1004</sub></td>
+    <td width="33%" align="center"><a href="#underwriting-workflow"><strong>◈ Follow the evidence</strong></a><br/><sub>Rules · provenance · revisions · replay</sub></td>
+    <td width="34%" align="center"><a href="#installation-and-local-setup"><strong>⌘ Run the project</strong></a><br/><sub>Windows · Python · Docker · local demo</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="#system-architecture"><strong>▣ Inspect the system</strong></a><br/><sub>Services · data · background worker</sub></td>
+    <td align="center"><a href="#policy-governance-and-review"><strong>⚖ Review policy changes</strong></a><br/><sub>Simulation · approval · audit</sub></td>
+    <td align="center"><a href="#testing-and-verification"><strong>✓ Check the evidence</strong></a><br/><sub>Tests · CI · recovery · limitations</sub></td>
+  </tr>
+</table>
+
+**End-to-end in one line**
+
+```text
+Borrower intake → consent → source evidence → reconciliation → EMI/FOIR/LTV
+             → versioned policy → APPROVE / REFER / REJECT → audit + replay
+```
+
+<details>
+<summary><strong>What is interactive in this GitHub README?</strong></summary>
+
+The navigation tiles jump to individual technical sections. Screenshots open full-size, the sections labeled **Expand** reveal deeper implementation details, and GitHub renders the workflow diagrams. GitHub READMEs do not execute arbitrary JavaScript, connect to the local API, or run an interactive mortgage simulator. The actual interactive product starts at `http://127.0.0.1:8000` after [local setup](#installation-and-local-setup).
+
+</details>
 
 ## Product preview
 
@@ -106,7 +135,40 @@ The sample database includes **16 synthetic applications** covering positive dec
 | Proposed EMI | ₹22,108 | FOIR | 36.1% |
 | LTV | 50.0% | Outcome | **REFER** |
 
-**Why `REFER`?** Bank and supporting income evidence disagree beyond the configured **15% tolerance**. The case cannot pass merely because the resulting FOIR and LTV appear within the LAP policy thresholds.
+**Why `REFER`?** In the seeded AS-1004 application, accepted bank-income evidence is **₹1,00,000/month** while supporting income evidence is **₹55,000/month**. The **45% disagreement** exceeds the illustrative **15% tolerance**, so the evidence gate remains unresolved even though FOIR and LTV fit the local LAP thresholds.
+
+```text
+AS-1004  /  LAP  /  evidence revision 1
+
+Bank income           ₹1,00,000  ████████████████████
+Income support          ₹55,000  ███████████
+                                   │
+                        45% source disagreement
+                                   │  tolerance: 15%
+                                   ▼
+                    REFER · INCOME_CONTRADICTION
+                                   │
+                      Analyst requests clarification
+                                   ▼
+                    New evidence revision → reassess
+                                   │
+                      Earlier assessment stays intact
+```
+
+<details>
+<summary><strong>Expand: compare other seeded cases</strong></summary>
+
+| Select in application queue | Demonstrated condition | What to inspect |
+| --- | --- | --- |
+| `AS-1001` | Home Loan fixture with passing illustrative checks | `APPROVE` and the recorded pass conditions |
+| `AS-1003` | Affordability limit breached | `REJECT` and the failed numerical rule |
+| `AS-1004` | Conflicting income sources | `REFER` with `INCOME_CONTRADICTION` |
+| `AS-1006` | Potential screening match | Human-review blocker, not an allegation |
+| `AS-1007` | Simulated provider failure | Unresolved provider dependency; no fabricated verification |
+
+Each case uses **synthetic fixtures**. Outcomes are neither real credit offers nor decisions made with licensed lender data.
+
+</details>
 
 Other useful cases: `AS-1001` demonstrates an illustrative clean Home Loan; `AS-1003` a known affordability failure (`REJECT`); `AS-1006` a potential screening match requiring human review; `AS-1007` a provider failure that remains unresolved. See [the demo script](docs/DEMO_SCRIPT.md) for the longer sequence.
 
@@ -145,24 +207,22 @@ These are implemented design choices, **not a claim of a new lending algorithm, 
 
 ```mermaid
 flowchart TD
-    A[Home Loan or LAP intake] --> B[Record applicant, terms and property]
-    B --> C[Check consent: missing consent creates an unresolved gate]
-    C --> D[Collect permissible evidence / mark unavailable sources unresolved]
-    D --> E[Check verification, mode, age and provenance]
-    E --> F[Reconcile income, property and obligations]
-    F --> G[Compute EMI, FOIR, LTV and monthly surplus]
-    G --> H[Evaluate versioned policy rules]
-    H --> J{Known hard policy failure?}
-    J -->|Yes| X[REJECT: illustrative policy]
-    J -->|No| K{Mandatory evidence or governance unresolved?}
-    K -->|Yes| R2[REFER: analyst review]
-    K -->|No| P[APPROVE: simulated outcome]
-    R2 --> S[Persist snapshot, reasons and audit]
-    X --> S
-    P --> S
-    S --> T[Correct evidence and increment revision]
-    T --> E
-    S --> U[Replay original snapshot later]
+    Intake["1. Home Loan or LAP intake"] --> Consent["2. Consent and permitted evidence"]
+    Consent --> Trust["3. Source verification and provenance"]
+    Trust --> Reconcile["4. Reconcile income, obligations and property"]
+    Reconcile --> Finance["5. Calculate EMI, FOIR, LTV and surplus"]
+    Finance --> Policy["6. Apply versioned credit policy"]
+    Policy --> Fail{"Known hard policy failure?"}
+    Fail -->|Yes| Reject["REJECT · illustrative outcome"]
+    Fail -->|No| Missing{"Mandatory check unresolved?"}
+    Missing -->|Yes| Refer["REFER · analyst review"]
+    Missing -->|No| Approve["APPROVE · simulated outcome"]
+    Reject --> Snapshot["Persist snapshot, reasons and audit"]
+    Refer --> Snapshot
+    Approve --> Snapshot
+    Snapshot --> Revise["New evidence revision → reassess"]
+    Revise --> Trust
+    Snapshot --> Replay["Replay historical input and policy"]
 ```
 
 **Decision order:** a known hard policy failure produces `REJECT`; otherwise, an unresolved mandatory condition produces `REFER`; `APPROVE` is possible only when every applicable gate passes. In production mode, missing institutional authorization forces a referral even where an illustrative numerical rule fails. This safety gate is intentional.
@@ -172,7 +232,7 @@ flowchart TD
 `finance.py` uses `Decimal`, with rupee values rounded half-up to two decimal places. For principal `P`, annual interest rate `i` (percent), and tenure `n` months:
 
 ```text
-monthly_rate = i / 1200
+r            = i / 1200  # monthly decimal interest rate; i is the annual percent
 EMI          = P * r * (1+r)^n / ((1+r)^n - 1)
 FOIR         = (existing monthly obligations + proposed EMI) / accepted monthly income
 LTV          = requested principal / accepted property valuation
@@ -200,22 +260,22 @@ sequenceDiagram
     autonumber
     actor Analyst
     participant API as FastAPI
-    participant DB as PostgreSQL / SQLite
-    participant E as Evidence and policy service
-    participant R as Deterministic engine
-    Analyst->>API: Submit corrected evidence (authorized role)
-    API->>DB: Validate ownership; append evidence revision
-    API->>E: Build current permissible input snapshot
-    E->>DB: Read active product policy and source metadata
-    E->>R: evaluate(snapshot, policy)
-    R-->>E: Outcome + rules + conflicts + financials
-    E->>DB: Append assessment, review tasks and audit event
-    API-->>Analyst: New decision and assessment ID
+    participant Store as Database
+    participant Assessment as Assessment service
+    participant Rules as Rule engine
+    Analyst->>API: Submit corrected synthetic evidence
+    API->>Store: Authorize and append evidence revision
+    API->>Assessment: Build assessment input
+    Assessment->>Store: Load current evidence and active policy
+    Assessment->>Rules: Evaluate frozen input and policy
+    Rules-->>Assessment: Decision, conflicts, metrics, reasons
+    Assessment->>Store: Append new assessment and audit event
+    API-->>Analyst: New assessment ID and reasons
     Analyst->>API: Replay previous assessment ID
-    API->>DB: Retrieve original frozen inputs and policy
-    API->>R: Re-evaluate original inputs
-    R-->>API: Replay result and comparison
-    API-->>Analyst: Recorded vs replayed decision/reasons
+    API->>Store: Load original input and policy snapshot
+    API->>Rules: Evaluate original snapshot
+    Rules-->>API: Replayed result and comparison
+    API-->>Analyst: Original versus replayed decision
 ```
 
 The replay does **not** call a live provider or replace the saved assessment. The stored policy and input data determine the result. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DECISION_RULES.md`](docs/DECISION_RULES.md).
@@ -224,48 +284,69 @@ The replay does **not** call a live provider or replace the saved assessment. Th
 
 ```mermaid
 flowchart TB
-    subgraph Client[Browser workspace]
-      UI[Vanilla JS / HTML / CSS]
+    subgraph Browser["Browser workspace"]
+      UI["HTML, CSS and vanilla JavaScript"]
     end
-    subgraph Application[FastAPI application - Python]
-      AUTH[Local sessions / OIDC PKCE / RBAC]
-      API[Versioned REST routes]
-      WORKFLOW[Applications, consent, review and audit]
-      FIN[Decimal financial engine]
-      RULES[Versioned deterministic decision engine]
-      DOCUMENTS[Document encryption and isolated parsing]
-      GATEWAY[Provider adapter / signed gateway contract]
+    subgraph Backend["FastAPI application"]
+      API["Versioned API and access controls"]
+      AUTH["Sessions, OIDC and role checks"]
+      WORKFLOW["Consent, intake, review and audit"]
+      FIN["Decimal financial calculations"]
+      RULES["Deterministic policy engine"]
+      DOCS["Encrypted documents and bounded PDF parsing"]
+      GATE["Consent-bound provider gateway"]
     end
-    subgraph Storage[Persistence]
-      DB[(SQLAlchemy / PostgreSQL 16 or SQLite)]
-      FILES[(Encrypted document objects)]
-      JOBS[(Revision-aware job rows)]
+    subgraph Persistence["Persisted state"]
+      DB[("PostgreSQL or development SQLite")]
+      FILES[("Document objects")]
+      JOBS[("Revision-aware queued jobs")]
     end
-    subgraph Background[Worker process]
-      WORKER[Reassessment worker]
+    subgraph Worker["Background worker"]
+      W["Reassessment processing"]
     end
-    subgraph External[External dependencies - not connected in demo]
-      IDP[Institutional IdP]
-      PARTNERS[KYC, bureau, AA, GST, property providers]
+    subgraph External["External services - not connected in local demo"]
+      IDP["Approved lender identity provider"]
+      PROVIDERS["Contracted financial evidence providers"]
     end
-    UI -->|HTTP + CSRF/session| API
+    UI --> API
     API --> AUTH
     API --> WORKFLOW
-    WORKFLOW --> FIN --> RULES
-    API --> DOCUMENTS
-    API --> GATEWAY
-    WORKFLOW <--> DB
+    API --> DOCS
+    API --> GATE
+    WORKFLOW --> FIN
+    FIN --> RULES
+    WORKFLOW --> DB
     RULES --> DB
-    DOCUMENTS <--> FILES
+    DOCS --> FILES
     WORKFLOW --> JOBS
-    JOBS --> WORKER --> RULES
-    AUTH -.->|Configured deployments| IDP
-    GATEWAY -.->|Contracts and credentials required| PARTNERS
+    JOBS --> W
+    W --> RULES
+    AUTH -.-> IDP
+    GATE -.-> PROVIDERS
 ```
+
+<details>
+<summary><strong>Expand: follow one request through the code</strong></summary>
+
+| Stage | Entry point | Reads or writes | Observable result |
+| --- | --- | --- | --- |
+| HTTP request | [`main.py`](src/aadharshila/main.py) | Authorization, lender scope, request schema | Accepted request or explicit access/error response |
+| Evidence and snapshot | [`service.py`](src/aadharshila/service.py) | Latest permitted evidence, policy, revision | Frozen assessment inputs |
+| Finance | [`finance.py`](src/aadharshila/finance.py) | Principal, income, obligations, valuation | EMI, FOIR, LTV and repayment figures |
+| Decision | [`engine.py`](src/aadharshila/engine.py) | Frozen inputs plus exact policy | Rules, conflicts, reason codes and outcome |
+| History | [`models.py`](src/aadharshila/models.py), [`service.py`](src/aadharshila/service.py) | New assessment and audit records | Historical replay and decision diff |
+| Queued work | [`worker.py`](src/aadharshila/worker.py) | Target evidence revision | Completed or superseded reassessment |
+
+The browser reads these results. It does not run the credit policy itself.
+
+</details>
 
 **Deployment model:** a modular monolith with a separate database-backed worker. The browser doesn't determine eligibility. Server routes perform role and object checks before reading or changing applications. SQLAlchemy persists business entities; Alembic versions schema changes. Queued jobs carry their target evidence revision, and obsolete jobs are superseded rather than writing a stale assessment.
 
 ### Major data entities
+
+<details>
+<summary><strong>Expand: relational data model</strong></summary>
 
 ```mermaid
 erDiagram
@@ -284,6 +365,8 @@ erDiagram
     POLICY ||--o{ POLICY_SIMULATION : validated_by
     USER ||--o{ FEDERATED_SESSION : authenticates
 ```
+
+</details>
 
 A lender organization scopes policies, applications, and user access. Each assessment references a frozen decision context; the latest application view and the historical record are different concepts.
 
@@ -340,19 +423,19 @@ The system keeps three questions separate: **What did the applicant claim? What 
 
 ```mermaid
 flowchart LR
-    CLAIM[Applicant claim or uploaded document] --> UNVERIFIED[Unverified input]
-    PROVIDER[Configured evidence provider] --> CONTRACT{Authenticated invocation and exact consent?}
-    CONTRACT -->|No| UNRESOLVED[UNRESOLVED]
-    CONTRACT -->|Yes| SIGNED[Verified gateway signature / stored invocation provenance]
-    SIGNED --> FRESH{Fresh, matching category and owner?}
+    CLAIM["Applicant claim or uploaded file"] --> UNVERIFIED["Unverified input"]
+    PROVIDER["Configured provider"] --> CONTRACT{"Valid consent and signed source response?"}
+    CONTRACT -->|No| UNRESOLVED["Unresolved"]
+    CONTRACT -->|Yes| SIGNED["Authenticated invocation provenance"]
+    SIGNED --> FRESH{"Valid category, owner and freshness?"}
     FRESH -->|No| UNRESOLVED
-    FRESH -->|Yes| EVIDENCE[Permissible source evidence]
-    FIXTURE[Synthetic fixture] --> DEMO[SIMULATED: demo only]
-    UNVERIFIED --> GATE[Underwriting gates]
-    UNRESOLVED --> GATE
-    EVIDENCE --> GATE
-    DEMO --> GATE
-    GATE --> RESULT[Outcome with explicit provenance limits]
+    FRESH -->|Yes| EVIDENCE["Permissible source evidence"]
+    FIXTURE["Local synthetic fixture"] --> DEMO["SIMULATED only"]
+    UNVERIFIED --> GATES["Underwriting controls"]
+    UNRESOLVED --> GATES
+    EVIDENCE --> GATES
+    DEMO --> GATES
+    GATES --> RESULT["Decision with recorded provenance"]
 ```
 
 - A fixture can be internally labeled `VERIFIED` to test rules, yet still have `mode=SIMULATED`. That never establishes real bank or issuer verification.
@@ -378,6 +461,20 @@ stateDiagram-v2
 ```
 
 The simulation reruns the proposed rules against saved synthetic assessment inputs and returns original counts, simulated counts, and case-level changes. It does not mutate historical assessments. A SHA-256 fingerprint ties approval to the exact policy that was simulated; author, simulation actor, and approver cannot collapse into one unchecked action.
+
+<details>
+<summary><strong>Expand: simulation and approval invariants</strong></summary>
+
+- The simulation records a hash of the **exact** draft configuration that was tested.
+- A policy change after simulation requires a fresh simulation before approval.
+- Policy author and approver must be different authorized users within the lender scope.
+- Approval and activation require a recorded human reason; they append governance audit events.
+- An approved policy affects future assessments. Earlier assessments retain their original input and policy snapshots.
+- Internal approval cannot substitute for a lender's legal, credit-committee or regulatory authorization.
+
+Related code: [`main.py`](src/aadharshila/main.py), [`models.py`](src/aadharshila/models.py) and [`production_gate.py`](src/aadharshila/production_gate.py).
+
+</details>
 
 **Illustrative policy API:** `POST /api/v1/policies`, `POST /api/v1/policies/{id}/validate`, `POST /api/v1/policies/{id}/simulate`, `POST /api/v1/policies/{id}/approve`, and `POST /api/v1/policies/{id}/activate`. Lender legal and credit committee approval are **external requirements**; internal role separation does not replace them.
 
@@ -437,6 +534,14 @@ Output includes `status: "SYNTHETIC_TEST_ONLY"`, `model_activated: false`, holdo
 - Internet access to install Python dependencies. Optional: Docker Desktop/Engine + Compose, Node.js, and Playwright/Chromium.
 - For optional OCR: Tesseract/PDFium; for production-style malware checks: an actual reachable ClamAV service. These are not part of `setup.bat`.
 
+<table>
+<tr><td align="center"><strong>Windows</strong><br/><sub><a href="#windows-quickstart">CMD + Python 3.11</a></sub></td>
+<td align="center"><strong>Linux / macOS</strong><br/><sub><a href="#unix-quickstart">Virtualenv + Uvicorn</a></sub></td>
+<td align="center"><strong>Docker</strong><br/><sub><a href="#docker-quickstart">PostgreSQL + API + worker</a></sub></td></tr>
+</table>
+
+<a id="windows-quickstart"></a>
+
 ### Windows — first run on `D:`
 
 Use **Command Prompt**. Multiple Python versions can coexist; create the environment explicitly before invoking the setup script.
@@ -451,7 +556,7 @@ setup.bat
 run.bat
 ```
 
-When the process is ready, open **http://127.0.0.1:8000**. Choose **Credit analyst** and enter `Demo@12345`.
+When the process is ready, open **http://127.0.0.1:8000** on the same computer. This is a local-only address, not a hosted demo. Choose **Credit analyst** and enter `Demo@12345`.
 
 **Already cloned?** Stop the currently running server first:
 
@@ -484,6 +589,8 @@ test.bat
 
 If `.venv` was created using an incompatible interpreter, stop the API/worker and recreate **only that environment**, then rerun `setup.bat`. Do not delete your database or `var/documents` to change Python versions.
 
+<a id="unix-quickstart"></a>
+
 ### Linux / macOS — development mode
 
 ```bash
@@ -500,6 +607,8 @@ python -m uvicorn aadharshila.main:app --host 127.0.0.1 --port 8000
 ```
 
 Run `python -m aadharshila.worker` in another terminal (same virtual environment) for asynchronous jobs.
+
+<a id="docker-quickstart"></a>
 
 ### Docker — PostgreSQL development stack
 
