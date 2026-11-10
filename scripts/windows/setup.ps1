@@ -11,7 +11,9 @@ try {
     $python = Join-Path $root '.venv/Scripts/python.exe'
     & $python -m pip install --upgrade pip
     if ($LASTEXITCODE -ne 0) { throw 'pip upgrade failed.' }
-    & $python -m pip install -r requirements.txt
+    # The full local test suite exercises both underwriting and ML research modules.
+    # Install the research extras here so a fresh setup can run test.bat directly.
+    & $python -m pip install -r requirements-ml.txt
     if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
     & $python -m pip install --no-deps -e .
     if ($LASTEXITCODE -ne 0) { throw 'Package installation failed.' }
