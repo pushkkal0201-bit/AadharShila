@@ -3,6 +3,7 @@
 This module is deliberately NOT imported by the deterministic decision engine.
 It never loads pickle, accepts arbitrary model upload, or persists borrower data.
 """
+from .runtime import is_production
 from __future__ import annotations
 
 import hashlib
@@ -26,7 +27,7 @@ class ResearchModelUnavailable(ValueError):
 
 def load_pinned_research_model() -> tuple[dict, str]:
     """Require operator-owned file path + sha256. Even valid models remain demo only."""
-    if os.getenv('APP_ENV','development') == 'production':
+    if is_production():
         raise ResearchModelUnavailable('Research preview disabled in production')
     path=os.getenv('AADHARSHILA_RESEARCH_MODEL_PATH','').strip()
     expected=os.getenv('AADHARSHILA_RESEARCH_MODEL_SHA256','').strip().lower()

@@ -3,6 +3,7 @@
 No self-service account registration, no token trust without pinned issuer JWKS,
 no dynamic redirect URI, and no local password login in production.
 """
+from .runtime import is_production
 from __future__ import annotations
 import base64
 import hashlib
@@ -35,7 +36,7 @@ def validate_endpoints() -> tuple[str,str,str,str]:
     callback=urlsplit(redirect)
     if callback.path!='/api/v1/auth/oidc/callback' or callback.fragment or callback.query or callback.username or callback.password:
         raise BrowserSSOError('Invalid fixed OIDC redirect URI')
-    if callback.scheme!='https' and not (os.getenv('APP_ENV','development')!='production' and
+    if callback.scheme!='https' and not (not is_production() and
                                           callback.scheme=='http' and callback.hostname in ('127.0.0.1','localhost')):
         raise BrowserSSOError('OIDC redirect must use HTTPS')
     return auth,token,redirect,client

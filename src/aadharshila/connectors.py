@@ -4,6 +4,7 @@ This is NOT a direct integration with a bureau, CKYCR, DigiLocker or other
 regulated source. Those require onboarding, approval and provider-specific
 contracts. A configured gateway can be used only after such authorization.
 """
+from .runtime import is_production
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Protocol
@@ -114,7 +115,7 @@ class GatewayConfig:
             raise GatewayConfigurationError('Explicit provider name and LIVE/SANDBOX mode required')
         if len(self.token) < 16 or len(self.hmac_key) < 32:
             raise GatewayConfigurationError('Partner credentials and response-signing secret required')
-        if os.getenv('APP_ENV', 'development') == 'production' and self.mode != 'LIVE':
+        if is_production() and self.mode != 'LIVE':
             raise GatewayConfigurationError('SANDBOX providers cannot be used as production sources')
 
 
@@ -197,7 +198,7 @@ def consent_authorized(db, app, *, evidence_key=None, provider=None, mode=None):
         if expiry and expiry.tzinfo is None:
             expiry = expiry.replace(tzinfo=timezone.utc)
         if expiry and expiry<=now:continue
-        if mode=='LIVE' or (mode=='SANDBOX' and os.getenv('APP_ENV','development')=='production'):
+        if mode=='LIVE' or (mode=='SANDBOX' and is_production()):
             # A broad loan consent is insufficient for a regulated third-party
             # retrieval. The borrower must grant this provider and category.
             if consent.subject_id!=app.owner_id or consent.provider!=provider or evidence_key not in (consent.categories or []):
@@ -213,7 +214,7 @@ def configured_adapter(key):
         return None, 'GATEWAY_CONFIGURATION_INVALID'
     if config:
         return PartnerGatewayConnector(config), None
-    if os.getenv('APP_ENV', 'development') == 'production':
+    if is_production():
         return None, 'PROVIDER_NOT_CONFIGURED'
     return DeterministicFixtureConnector(), None
 
