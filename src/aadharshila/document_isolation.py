@@ -24,9 +24,10 @@ def extract_pdf_isolated(raw: bytes, *, ocr_enabled: bool = False, timeout: int 
         raise ValueError('Extraction timeout must be bounded')
     allowed_env = ('PATH', 'SYSTEMROOT', 'WINDIR', 'VIRTUAL_ENV', 'PYTHONHOME', 'TMP', 'TEMP', 'LANG')
     env = {key: os.environ[key] for key in allowed_env if key in os.environ}
-    # Preserve editable-package import paths, but never inherit secrets.
-    if os.getenv('PYTHONPATH'):
-        env['PYTHONPATH'] = os.pathsep.join(str(Path(p or '.').resolve()) for p in os.environ['PYTHONPATH'].split(os.pathsep))
+    # Resolve the installed package location explicitly. The subprocess runs in
+    # a disposable directory, so it must not rely on the parent's working dir
+    # or on a caller-controlled PYTHONPATH for module discovery.
+    env['PYTHONPATH'] = str(Path(__file__).resolve().parents[1])
     env['AADHARSHILA_WORKER_OCR'] = '1' if ocr_enabled else '0'
     with tempfile.TemporaryDirectory(prefix='aadharshila-pdf-') as scratch:
         try:
