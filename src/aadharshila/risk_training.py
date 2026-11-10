@@ -115,7 +115,8 @@ def train(csv: Path, manifest_file: Path, output: Path) -> dict:
         raise ValueError('Dataset lacks required columns: ' + str(sorted(required - set(df.columns))))
     if len(df) < 300:
         raise ValueError('Need at least 300 unique, matured decision records for this development evaluation')
-    if df[id_key].isnull().any() or df[id_key].duplicated().any():
+    borrower_ids=df[id_key].astype('string').str.strip()
+    if borrower_ids.isna().any() or borrower_ids.eq('').any() or borrower_ids.duplicated().any():
         raise ValueError('Duplicate or missing borrower IDs: refuse possible train/test leakage')
     decision_dates = pd.to_datetime(df[date_key], utc=True, errors='coerce')
     if decision_dates.isna().any():
@@ -128,7 +129,13 @@ def train(csv: Path, manifest_file: Path, output: Path) -> dict:
     if df['default_12m'].isna().any() or not set(df['default_12m'].unique()) <= {0,1}:
         raise ValueError('Expected mature binary default_12m labels, no null/unknown outcomes')
     values = df[manifest['features']].apply(pd.to_numeric, errors='coerce')
-    if np.isinf(values.to_numpy()).any():raise ValueError('Non-finite model features')
+    if (df[manifest['features']].notna() & values.isna()).to_numpy().any():
+        raise ValueError('Non-numeric training feature is not a missing observation')
+    numeric_values=values.to_numpy(dtype=float)
+    if np.isinf(numeric_values).any():raise ValueError('Non-finite model features')
+    observed=numeric_values[np.isfinite(numeric_values)]
+    if np.any((observed<0) | (observed>5)):
+        raise ValueError('Training feature outside documented [0,5] inference contract')
     if values.isnull().all(axis=0).any():raise ValueError('At least one feature column has no observed values')
     ordered = np.argsort(decision_dates.to_numpy(), kind='stable')
     n=len(df)

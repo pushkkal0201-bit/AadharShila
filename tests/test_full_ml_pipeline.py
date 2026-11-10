@@ -155,3 +155,28 @@ def test_application_and_research_endpoint_isolation(trained,monkeypatch,client,
     assert client.post('/api/v1/research/risk-model/preview',headers=h,json={
         'features':DEMO_FEATURES,'synthetic_acknowledged':True}).status_code in (401,404)
     assert client.get('/api/v1/research/risk-model/status').status_code in (401,404)
+
+def test_training_rejects_out_of_contract_and_non_numeric_features(trained,tmp_path):
+    import pandas as pd
+    _,csv,manifest,_,_,_=trained
+    original=pd.read_csv(csv)
+    for bad,fragment in [(5.01,'outside documented'),(-0.01,'outside documented'),
+                         ('not-a-number','Non-numeric training')]:
+        df=original.copy()
+        df['foir']=df['foir'].astype(object)
+        df.loc[0,'foir']=bad
+        data=tmp_path/'invalid_train.csv'
+        df.to_csv(data,index=False)
+        with pytest.raises(ValueError,match=fragment):
+            train(data,manifest,tmp_path/'model.json')
+
+
+def test_training_rejects_borrower_ids_differing_only_in_whitespace(trained,tmp_path):
+    import pandas as pd
+    _,csv,manifest,_,_,_=trained
+    df=pd.read_csv(csv)
+    df.loc[1,'borrower_id']=' '+str(df.loc[0,'borrower_id'])+' '
+    data=tmp_path/'duplicates.csv'
+    df.to_csv(data,index=False)
+    with pytest.raises(ValueError,match='Duplicate or missing borrower'):
+        train(data,manifest,tmp_path/'model.json')

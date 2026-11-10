@@ -165,3 +165,23 @@ def test_reproducible_external_date_demo(research_model,tmp_path):
     assert result['independent_validation_completed'] is False
     assert result['rows']==300
     assert (tmp_path/'external/independent_evaluation.json').exists()
+
+def test_external_evaluation_rejects_non_numeric_values(independent_synthetic):
+    import pandas as pd
+    raw=independent_synthetic[2]
+    frame=pd.read_csv(raw)
+    frame['foir']=frame['foir'].astype(object)
+    frame.loc[0,'foir']='not-a-number'
+    frame.to_csv(raw,index=False)
+    with pytest.raises(ValueError,match='Non-numeric evaluation'):
+        evaluate(independent_synthetic)
+
+
+def test_external_evaluation_rejects_normalized_duplicate_ids(independent_synthetic):
+    import pandas as pd
+    raw=independent_synthetic[2]
+    frame=pd.read_csv(raw)
+    frame.loc[1,'borrower_id']=' '+str(frame.loc[0,'borrower_id'])+' '
+    frame.to_csv(raw,index=False)
+    with pytest.raises(ValueError,match='repeated borrower'):
+        evaluate(independent_synthetic)
